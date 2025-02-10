@@ -1,0 +1,3 @@
+(documentation
+ (package PROJECT_NAME_)
+ (mld_files PROJECT_NAME_))
