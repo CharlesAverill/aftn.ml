@@ -1,23 +1,23 @@
 (lang dune 3.9)
 
-(name PROJECT_NAME_)
+(name AFTN)
 
 (generate_opam_files true)
 
 (source
- (github _AUTHOR_USERNAME_/PROJECT_NAME_))
+ (github CharlesAverill/AFTN))
 
-(authors "_AUTHOR_NAME_")
+(authors "Charles Averill")
 
-(maintainers "_AUTHOR_NAME_")
+(maintainers "Charles Averill")
 
 (license LICENSE)
 
-(documentation https://github.com/_AUTHOR_USERNAME_/PROJECT_NAME_)
+(documentation https://github.com/CharlesAverill/AFTN)
 
 (package
- (name PROJECT_NAME_)
- (synopsis "_PROJECT_SYNOPSIS_")
- (description "_PROJECT_DESCRIPTION_")
+ (name AFTN)
+ (synopsis "")
+ (description "Alien: Fate of the Nostromo port")
  (depends ocaml dune alcotest ocamlformat))
 
