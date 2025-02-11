@@ -1,3 +1,9 @@
-{0 Index}
+{0 AFTN}
 
-Hello World!
+{%html:
+  <img src="https://raw.githubusercontent.com/CharlesAverill/aftn.ml/refs/heads/main/game_data/materials/box_art.png">
+%}
+
+Alien: Fate of the Nostromo port in OCaml.
+
+Code documentation: {:./module/index.html}
