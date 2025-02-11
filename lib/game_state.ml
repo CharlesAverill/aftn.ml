@@ -1,20 +1,18 @@
+(** Game_state - Tracking the state of the currently-running game *)
+
 open Map
 open Character
 open Encounter
 open Utils
 
+(** Running game state *)
 type state =
-  { (* Game map *)
-    map: map
-  ; (* Characters in play *)
-    characters: character list
-  ; (* Location of characters in play *)
-    character_rooms: room list
-  ; (* Scrap per character *)
-    character_scraps: int list
-  ; (* Un-drawn encounters *)
-    encounters: encounter list
-  ; (* Discarded encounters *) discarded_encounters: encounter list }
+  { map: map  (** Game map *)
+  ; characters: character list  (** Characters in play *)
+  ; character_rooms: room list  (** Location of characters in play *)
+  ; character_scraps: int list  (** Scrap per character *)
+  ; encounters: encounter list  (** Un-drawn encounters *)
+  ; discarded_encounters: encounter list  (** Discarded encounters *) }
 
 let game_state : state ref =
   ref

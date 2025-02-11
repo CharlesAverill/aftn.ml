@@ -58,15 +58,14 @@ docs: cleandocs build
 	mv -f _build/default/_doc/_html/* $(DOCS_PATH)
 	rm -f $(DOCS_PATH)index.html
 	mv $(DOCS_PATH)AFTN/AFTN.html $(DOCS_PATH)index.html
-	mv $(DOCS_PATH)AFTN $(DOCS_PATH)module
+	mv $(DOCS_PATH)AFTN/AFTN $(DOCS_PATH)module
+	rm -rf $(DOCS_PATH)AFTN
 	
 	@echo "Preparing Index\n--------------"
 	# Header
 	sed -i 's/<title>.*<\/title>/<title>$(DOCS_INDEX_TITLE)<\/title>/g' $(DOCS_PATH)index.html
 	sed -i 's@</head>@$(DOCS_EMBED)\n</head>@g' $(DOCS_PATH)index.html
 	sed -i 's/..\/odoc.support/odoc.support/g' $(DOCS_PATH)index.html
-	# Body
-	sed -i "s@<nav class="odoc-nav">.*gbcamel</nav>@@g" $(DOCS_PATH)index.html
 
 push: cleandocs build
 	@read -p "Commit message: " input; \
