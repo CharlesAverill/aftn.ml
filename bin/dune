@@ -1,4 +1,8 @@
 (executable
  (public_name AFTN)
  (name main)
- (libraries AFTN))
+ (libraries AFTN dune-site))
+
+(generate_sites_module
+ (module aftn_sites)
+ (sites AFTN))

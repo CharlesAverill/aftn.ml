@@ -2,3 +2,10 @@
  (dev
   (flags
    (:standard -w -32-27-33-26))))
+
+(install
+ (section
+  (site
+   (AFTN game_data)))
+ (files
+  (glob_files_rec game_data/*)))

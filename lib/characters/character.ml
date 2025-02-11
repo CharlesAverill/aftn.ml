@@ -6,15 +6,15 @@ open Map
 type ability_output =
   { used_action: bool  (** Whether this ability used an action *)
   ; can_use_again_this_turn: bool
-        (*** Whether this ability can be used again this turn *)
+        (** Whether this ability can be used again this turn *)
   ; moved_character_index: int option
-        (*** If a character was moved, then the index into the global character list of the character that was moved *)
+        (** If a character was moved, then the index into the global character list of the character that was moved *)
   }
 
 let default_ability_output : ability_output =
   {used_action= true; can_use_again_this_turn= true; moved_character_index= None}
 
-(*** Character information *)
+(** Character information *)
 type character =
   { (* General cosmetic data *)
     first_name: string

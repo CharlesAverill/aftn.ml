@@ -17,7 +17,7 @@ type state =
 (** Reference to the global game state *)
 let game_state : state ref =
   ref
-    { map= parse_map_file "/home/charles/Desktop/aftn.ml/game_data/maps/default"
+    { map= blank_map
     ; characters= []
     ; character_rooms= []
     ; character_scraps= []
@@ -122,3 +122,6 @@ let replace_encounter () : unit =
         { !game_state with
           encounters= h :: !game_state.encounters
         ; discarded_encounters= t }
+
+let set_map (map_fn : string) : unit =
+  game_state := {!game_state with map= parse_map_file map_fn}

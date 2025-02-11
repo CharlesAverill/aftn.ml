@@ -19,5 +19,8 @@
  (name AFTN)
  (synopsis "")
  (description "Alien: Fate of the Nostromo port")
- (depends ocaml dune alcotest ocamlformat odoc))
+ (sites (share game_data))
+ (depends ocaml dune alcotest ocamlformat odoc dune-site))
 
+(using directory-targets 0.1)
+(using dune_site 0.1)
