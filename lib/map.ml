@@ -18,6 +18,19 @@ type room =
   ; (* Room connected by a ladder *)
     ladder_connection: room option }
 
+let string_of_room (r : room) =
+  Printf.sprintf
+    "Name: %s\n\
+     Is corridor: %b\n\
+     Scrap: %n\n\
+     Has event: %b\n\
+     Items: TODO\n\
+     Connections: %s\n\
+     Ladder connection: %s\n"
+    r.name r.is_corridor r.num_scrap r.has_event
+    (String.concat "," (List.map (fun (r : room) -> r.name) r.connections))
+    (match r.ladder_connection with None -> "None" | Some s -> s.name)
+
 let blank_room =
   { name= ""
   ; is_corridor= true
@@ -31,7 +44,7 @@ let new_room (name : string) : room = {blank_room with name; is_corridor= false}
 
 type map =
   { (* Name of this map *)
-    name: string
+    map_name: string
   ; (* Rooms in this map *)
     rooms: room list
   ; player_start_room: room
@@ -66,42 +79,75 @@ let map_file_of_map m =
      ---\n\
      %s\n"
     (* Map name *)
-    m.name
+    m.map_name
     (* Room names *)
-    (List.fold_left
-       (fun s (r : room) ->
-         s
-         ^ ( if r = m.player_start_room then
-               "*"
-             else if r = m.xeno_start_room then
-               "&"
-             else if r = m.ash_start_room then
-               "$"
-             else
-               "" )
-         ^ r.name ^ "\n" )
-       "" m.rooms )
+    (String.trim
+       (List.fold_left
+          (fun s (r : room) ->
+            if r.is_corridor then
+              s
+            else
+              s
+              ^ ( if r = m.player_start_room then
+                    "*"
+                  else if r = m.xeno_start_room then
+                    "&"
+                  else if r = m.ash_start_room then
+                    "$"
+                  else
+                    "" )
+              ^ r.name ^ "\n" )
+          "" m.rooms ) )
     (* Number of corridors *)
-    (List.length
-       (List.filter
-          (fun (r : room) -> String.starts_with ~prefix:"Corridor " r.name)
-          m.rooms ) )
+    (List.length (List.filter (fun r -> r.is_corridor) m.rooms))
     (* Connections *)
-    (List.fold_left
-       (fun s (r : room) ->
-         s ^ r.name ^ ";"
-         ^ String.concat ";" (List.map (fun (r : room) -> r.name) r.connections)
-         ^ "\n" )
-       "" m.rooms )
+    (String.trim
+       (snd
+          (List.fold_left
+             (fun (seen, s) (r : room) ->
+               ( List.fold_left
+                   (fun s (a1, a2) ->
+                     fun (x1, x2) ->
+                      if (x1.name, x2.name) = (a1.name, a2.name) then
+                        true
+                      else
+                        s (x1, x2) )
+                   seen
+                   (List.fold_left
+                      (fun a x -> (r, x) :: (x, r) :: a)
+                      [] r.connections )
+               , let unseen =
+                   List.filter (fun x -> not (seen (x, r))) r.connections
+                 in
+                 if unseen = [] then
+                   s
+                 else
+                   s ^ r.name ^ ";"
+                   ^ String.concat ";"
+                       (List.map (fun (r : room) -> r.name) unseen)
+                   ^ "\n" ) )
+             ((fun _ -> false), "")
+             m.rooms ) ) )
     (* Ladders *)
-    (List.fold_left
-       (fun s (r : room) ->
-         match r.ladder_connection with
-         | None ->
-             s
-         | Some lc ->
-             s ^ r.name ^ ";" ^ lc.name ^ "\n" )
-       "" m.rooms )
+    (String.trim
+       (snd
+          (List.fold_left
+             (fun (seen, s) r ->
+               if seen r then
+                 (seen, s)
+               else
+                 match r.ladder_connection with
+                 | None ->
+                     (seen, s)
+                 | Some lc ->
+                     ( (fun x ->
+                         if x.name = lc.name then
+                           true
+                         else
+                           seen x )
+                     , s ^ r.name ^ ";" ^ lc.name ^ "\n" ) )
+             ((fun _ -> false), "")
+             m.rooms ) ) )
     (* Scrap rooms *)
     (String.concat ";" (List.map (fun (r : room) -> r.name) m.scrap_rooms))
     (* Event rooms *)
@@ -116,7 +162,7 @@ let map_file_of_map m =
         s )
 
 let blank_map =
-  { name= ""
+  { map_name= ""
   ; rooms= []
   ; player_start_room= blank_room
   ; xeno_start_room= blank_room
@@ -127,18 +173,6 @@ let blank_map =
   ; ascii_map= None }
 
 let find_room_by_name (m : map) (name : string) : room =
-  let name =
-    (* If number, prepend corridor *)
-    if
-      try
-        int_of_string name |> ignore ;
-        true
-      with Failure _ -> false
-    then
-      "Corridor " ^ name
-    else
-      name
-  in
   try List.find (fun (r : room) -> r.name = name) m.rooms
   with Not_found -> fatal rc_Error ("Failed to find room \"" ^ name ^ "\"")
 
@@ -198,122 +232,157 @@ let advance_parsing_state = function
         None )
 
 let parse_map_file (map_fn : string) : map =
-  snd
-    (List.fold_left
-       (fun (state, m) line ->
-         if line = "---" then (
-           _log Log_Debug
-             ( "Parsing "
-             ^
-             match advance_parsing_state state with
-             | None ->
-                 "nothing"
-             | Some state ->
-                 string_of_parsing_state state ) ;
-           print_endline (map_file_of_map m) ;
-           (advance_parsing_state state, m)
-         ) else
-           ( state
-           , match state with
-             | None ->
-                 m
-             | Some s -> (
-               match s with
-               | MapName ->
-                   {m with name= line}
-               | RoomNames -> (
-                   let line' = String.sub line 1 (String.length line - 1) in
-                   let room' = new_room line' in
-                   match line.[0] with
-                   | '*' ->
-                       {m with player_start_room= room'; rooms= room' :: m.rooms}
-                   | '&' ->
-                       {m with xeno_start_room= room'; rooms= room' :: m.rooms}
-                   | '$' ->
-                       {m with ash_start_room= room'; rooms= room' :: m.rooms}
-                   | _ ->
-                       {m with rooms= new_room line :: m.rooms} )
-               | NumCorridors ->
-                   List.fold_left
-                     (fun m i ->
-                       { m with
-                         rooms=
-                           {blank_room with name= "Corridor " ^ string_of_int i}
-                           :: m.rooms } )
-                     m
-                     (range 1 (int_of_string line))
-               | RoomConnections -> (
-                 match String.split_on_char ';' line with
-                 | [] ->
-                     m
-                 | room_name :: connections ->
-                     let conns_to_add =
-                       List.map
-                         (fun c ->
-                           (find_room_by_name m room_name, find_room_by_name m c) )
-                         connections
-                       @ List.map
-                           (fun c ->
-                             ( find_room_by_name m c
-                             , find_room_by_name m room_name ) )
-                           connections
+  let room_idx, player_start_idx, ash_start_idx, xeno_start_idx =
+    (ref 0, ref (-1), ref (-1), ref (-1))
+  in
+  (* We need to reverse the lists after parsing to maintain lockstep with the input file *)
+  let pre_reversed : map =
+    snd
+      (List.fold_left
+         (fun (state, m) line ->
+           if line = "---" then (
+             _log Log_Debug
+               ( "Parsing "
+               ^
+               match advance_parsing_state state with
+               | None ->
+                   "nothing"
+               | Some state ->
+                   string_of_parsing_state state ) ;
+             (advance_parsing_state state, m)
+           ) else
+             ( state
+             , match state with
+               | None ->
+                   m
+               | Some s -> (
+                 match s with
+                 | MapName ->
+                     {m with map_name= line}
+                 | RoomNames ->
+                     let line' = String.sub line 1 (String.length line - 1) in
+                     let room =
+                       match line.[0] with
+                       | '*' ->
+                           player_start_idx := !room_idx ;
+                           new_room line'
+                       | '&' ->
+                           xeno_start_idx := !room_idx ;
+                           new_room line'
+                       | '$' ->
+                           ash_start_idx := !room_idx ;
+                           new_room line'
+                       | _ ->
+                           new_room line
                      in
+                     room_idx := !room_idx + 1 ;
+                     {m with rooms= room :: m.rooms}
+                 | NumCorridors ->
                      List.fold_left
-                       (fun m ((r1, r2) : room * room) ->
+                       (fun m i ->
                          { m with
                            rooms=
-                             replace m.rooms
-                               (fun r -> r.name = r1.name)
-                               {r1 with connections= r2 :: r1.connections} } )
-                       m conns_to_add )
-               | Ladders -> (
-                 match String.split_on_char ';' line with
-                 | [first; second] ->
-                     let first, second =
-                       (find_room_by_name m first, find_room_by_name m second)
-                     in
+                             { blank_room with
+                               name= string_of_int i
+                             ; is_corridor= true }
+                             :: m.rooms } )
+                       m
+                       (range 1 (int_of_string line))
+                 | RoomConnections -> (
+                   match String.split_on_char ';' line with
+                   | [] ->
+                       m
+                   | room_name :: connections ->
+                       let conns_to_add =
+                         List.map
+                           (fun c ->
+                             ( find_room_by_name m room_name
+                             , find_room_by_name m c ) )
+                           connections
+                         @ List.map
+                             (fun c ->
+                               ( find_room_by_name m c
+                               , find_room_by_name m room_name ) )
+                             connections
+                       in
+                       List.iter
+                         (fun ((r1, r2) : room * room) ->
+                           print_endline (r1.name ^ " -> " ^ r2.name) )
+                         conns_to_add ;
+                       List.fold_left
+                         (fun m ((r1, r2) : room * room) ->
+                           let old_r1_connections =
+                             List.filter
+                               (fun (x : room) -> x.name != r2.name)
+                               (find_room_by_name m r1.name).connections
+                           in
+                           { m with
+                             rooms=
+                               replace m.rooms
+                                 (fun r -> r.name = r1.name)
+                                 {r1 with connections= old_r1_connections @ [r2]}
+                           } )
+                         m conns_to_add )
+                 | Ladders -> (
+                   match String.split_on_char ';' line with
+                   | [first; second] ->
+                       let first, second =
+                         (find_room_by_name m first, find_room_by_name m second)
+                       in
+                       { m with
+                         rooms=
+                           replace
+                             (replace m.rooms
+                                (fun r -> r.name = first.name)
+                                {first with ladder_connection= Some second} )
+                             (fun r -> r.name = second.name)
+                             {second with ladder_connection= Some first} }
+                   | _ ->
+                       _log Log_Warning
+                         ("Failed to parse ladders line: \"" ^ line ^ "\"") ;
+                       m )
+                 | ScrapRooms -> (
+                   match String.split_on_char ';' line with
+                   | [] ->
+                       m
+                   | room_names ->
+                       { m with
+                         scrap_rooms= List.map (find_room_by_name m) room_names
+                       } )
+                 | EventRooms -> (
+                   match String.split_on_char ';' line with
+                   | [] ->
+                       m
+                   | room_names ->
+                       { m with
+                         event_rooms= List.map (find_room_by_name m) room_names
+                       } )
+                 | CoolantRooms -> (
+                   match String.split_on_char ';' line with
+                   | [] ->
+                       m
+                   | room_names ->
+                       { m with
+                         coolant_rooms=
+                           List.map (find_room_by_name m) room_names } )
+                 | AsciiMap ->
                      { m with
-                       rooms=
-                         replace
-                           (replace m.rooms
-                              (fun r -> r.name = first.name)
-                              {first with ladder_connection= Some second} )
-                           (fun r -> r.name = second.name)
-                           {second with ladder_connection= Some first} }
-                 | _ ->
-                     _log Log_Warning
-                       ("Failed to parse ladders line: \"" ^ line ^ "\"") ;
-                     m )
-               | ScrapRooms -> (
-                 match String.split_on_char ';' line with
-                 | [] ->
-                     m
-                 | room_names ->
-                     { m with
-                       scrap_rooms= List.map (find_room_by_name m) room_names }
-                 )
-               | EventRooms -> (
-                 match String.split_on_char ';' line with
-                 | [] ->
-                     m
-                 | room_names ->
-                     { m with
-                       event_rooms= List.map (find_room_by_name m) room_names }
-                 )
-               | CoolantRooms -> (
-                 match String.split_on_char ';' line with
-                 | [] ->
-                     m
-                 | room_names ->
-                     { m with
-                       coolant_rooms= List.map (find_room_by_name m) room_names
-                     } )
-               | AsciiMap ->
-                   { m with
-                     ascii_map=
-                       ( match m.ascii_map with
-                       | None ->
-                           Some line
-                       | Some s ->
-                           Some (s ^ "\n" ^ line) ) } ) ) )
-       (Some MapName, blank_map) (read_file_lines map_fn) )
+                       ascii_map=
+                         ( match m.ascii_map with
+                         | None ->
+                             Some line
+                         | Some s ->
+                             Some (s ^ "\n" ^ line) ) } ) ) )
+         (Some MapName, blank_map) (read_file_lines map_fn) )
+  in
+  { pre_reversed with
+    rooms= List.rev pre_reversed.rooms
+  ; player_start_room=
+      List.nth pre_reversed.rooms
+        (List.length pre_reversed.rooms - !player_start_idx - 1)
+  ; ash_start_room=
+      List.nth pre_reversed.rooms
+        (List.length pre_reversed.rooms - !ash_start_idx - 1)
+  ; xeno_start_room=
+      List.nth pre_reversed.rooms
+        (List.length pre_reversed.rooms - !xeno_start_idx - 1) }

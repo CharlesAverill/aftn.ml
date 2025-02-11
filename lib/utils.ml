@@ -40,3 +40,10 @@ let range i j =
       aux (n - 1) (n :: acc)
   in
   aux j []
+
+let update f x y =
+ fun z ->
+  if x = z then
+    y
+  else
+    f z

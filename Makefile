@@ -4,6 +4,7 @@
 OPAM ?= opam
 OPAM_EXEC ?= $(OPAM) exec --
 DUNE ?= dune
+ARGS ?= 
 
 default: build
 
@@ -31,7 +32,7 @@ testf: fmt
 	$(OPAM_EXEC) $(DUNE) runtest -f
 
 run: build
-	$(OPAM_EXEC) $(DUNE) exec -- AFTN
+	$(OPAM_EXEC) $(DUNE) exec -- AFTN $(ARGS)
 
 debug: build
 	$(OPAM_EXEC) ocamldebug _build/default/AFTN/main.bc

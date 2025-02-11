@@ -4,7 +4,9 @@ open Encounter
 open Utils
 
 type state =
-  { (* Characters in play *)
+  { (* Game map *)
+    map: map
+  ; (* Characters in play *)
     characters: character list
   ; (* Location of characters in play *)
     character_rooms: room list
@@ -16,7 +18,8 @@ type state =
 
 let game_state : state ref =
   ref
-    { characters= []
+    { map= parse_map_file "/home/charles/Desktop/aftn.ml/game_data/maps/default"
+    ; characters= []
     ; character_rooms= []
     ; character_scraps= []
     ; encounters=
