@@ -1,3 +1,17 @@
+(include_subdirs unqualified)
+
 (library
  (name AFTN)
- (modules logging))
+ (modules
+  utils
+  selection
+  map
+  character
+  encounter
+  game_state
+  ripley
+  dallas
+  lambert
+  parker
+  brett
+  logging))

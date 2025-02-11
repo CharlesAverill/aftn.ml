@@ -1,27 +1,49 @@
 Nostromo
-MU-TH-UR;1;
-BRIDGE;1;2;
-*GALLEY;2;3;4;
-SUIT STORAGE;3;5;%EQUIPMENT STORAGE;
-DOCKING BAY;4;8;9;11;%MAINTENANCE BAY;
-HYPERSLEEP;8;
-AIRLOCK;11;
-$MED BAY;10;
-MAINTENANCE BAY;12;14;
-EQUIPMENT STORAGE;7;
-GARAGE;6;
-WORKSHOP;14;
-&NEST;13;
-9;10;
-5;10;
-6;12;
-7;12;
-12;13;
-~~~
-GARAGE;MU-TH-UR;MED BAY;MAINTENANCE BAY;
-GARAGE;WORKSHOP;MAINTENANCE BAY;
-WORKSHOP;GARAGE;MAINTENANCE BAY;EQUIPMENT STORAGE;MU-TH-UR;HYPERSLEEP;
-~~~
+---
+MU-TH-UR
+BRIDGE
+*GALLEY
+SUIT STORAGE
+DOCKING BAY
+HYPERSLEEP
+AIRLOCK
+$MED BAY
+MAINTENANCE BAY
+EQUIPMENT STORAGE
+GARAGE
+WORKSHOP
+&NEST
+---
+14
+---
+MU-TH-UR;1
+BRIDGE;1;2
+GALLEY;2;3;4
+SUIT STORAGE;3;5
+DOCKING BAY;4;8;9;11
+HYPERSLEEP;8
+AIRLOCK;11
+MED BAY;10
+MAINTENANCE BAY;12;14
+EQUIPMENT STORAGE;7
+GARAGE;6
+WORKSHOP;14
+NEST;13
+9;10
+5;10
+6;12
+7;12
+12;13
+---
+SUIT STORAGE;EQUIPMENT STORAGE
+DOCKING BAY;MAINTENANCE BAY
+---
+GARAGE;MU-TH-UR;MED BAY;MAINTENANCE BAY
+---
+GARAGE;WORKSHOP;MAINTENANCE BAY
+---
+WORKSHOP;GARAGE;MAINTENANCE BAY;EQUIPMENT STORAGE;MU-TH-UR;HYPERSLEEP
+---
                                                          ┌────────────┐
                        ┌──────────┐                      │            │
 ┌─────────┐            │          │                      │            ├──────┐
@@ -82,4 +104,3 @@ WORKSHOP;GARAGE;MAINTENANCE BAY;EQUIPMENT STORAGE;MU-TH-UR;HYPERSLEEP;
                   │                │                         │     ├────────────────────┤            │
                   │                ├─────────────────────────┴─────┘                    └────────────┘
                   └────────────────┘
-~~~
