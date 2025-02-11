@@ -1,3 +1,5 @@
+(** Random encounters *)
+
 type encounter =
   | Quiet
   | Alien_LostTheSignal

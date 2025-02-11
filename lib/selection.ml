@@ -1,11 +1,12 @@
-type 'a selection =
-  | (* User wants to go back *)
-    Back
-  (* User gave an invalid selection, optional error string *)
-  | Invalid of string option
-  (* User selected something *)
-  | Selected of 'a
+(** User selections from stdin *)
 
+type 'a selection =
+  | Back  (** User wants to go back *)
+  | Invalid of string option
+      (** User gave an invalid selection, optional error string *)
+  | Selected of 'a  (** User selected something *)
+
+(** Given a prompt and a list of options, prompt the user to select an option by index via stdin *)
 let rec get_int_selection (prompt : string) (options : string list) :
     int selection =
   print_endline prompt ;
@@ -23,6 +24,7 @@ let rec get_int_selection (prompt : string) (options : string list) :
         get_int_selection prompt options
       )
 
+(** A yes-or-no confirmation with a customizable prompt *)
 let rec confirm (prompt : string option) : bool =
   print_endline (match prompt with None -> "Confirm? (y/n)" | Some s -> s) ;
   let choice = String.lowercase_ascii (read_line ()) in

@@ -1,8 +1,12 @@
+(** Standard utilities *)
+
+(** Shuffle a [list] *)
 let shuffle d =
   let nd = List.map (fun c -> (Random.bits (), c)) d in
   let sond = List.sort compare nd in
   List.map snd sond
 
+(** Replace in a [list] by index *)
 let replacei l pos a =
   List.mapi
     (fun i x ->
@@ -12,6 +16,7 @@ let replacei l pos a =
         x )
     l
 
+(** Replace in a [list] all items that satisfy a ['a -> bool] function *)
 let replace l f a =
   List.map
     (fun x ->
@@ -21,6 +26,7 @@ let replace l f a =
         x )
     l
 
+(** Read and return the lines of a file *)
 let read_file_lines file : string list =
   let in_ch = open_in file in
   let rec read_line () =
@@ -32,6 +38,7 @@ let read_file_lines file : string list =
   in
   read_line ()
 
+(** For bounds [i] and [j], compute the list [i..j], inclusive *)
 let range i j =
   let rec aux n acc =
     if n < i then
@@ -41,6 +48,7 @@ let range i j =
   in
   aux j []
 
+(** Functional map update *)
 let update f x y =
  fun z ->
   if x = z then

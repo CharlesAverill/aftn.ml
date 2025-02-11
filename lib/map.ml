@@ -1,3 +1,5 @@
+(** Map parsing and utilities *)
+
 open Utils
 open Logging
 
@@ -18,6 +20,7 @@ type room =
   ; (* Room connected by a ladder *)
     ladder_connection: room option }
 
+(** Get [string] representation of [room] *)
 let string_of_room (r : room) =
   Printf.sprintf
     "Name: %s\n\
@@ -40,6 +43,7 @@ let blank_room =
   ; connections= []
   ; ladder_connection= None }
 
+(** Create new non-corridor [room] *)
 let new_room (name : string) : room = {blank_room with name; is_corridor= false}
 
 type map =
@@ -59,6 +63,7 @@ type map =
   ; (* ASCII representation of map *)
     ascii_map: string option }
 
+(** Get a [string] representation of a [map] that is equivalent to the input map file *)
 let map_file_of_map m =
   Printf.sprintf
     "%s\n\
@@ -172,10 +177,12 @@ let blank_map =
   ; coolant_rooms= []
   ; ascii_map= None }
 
+(** Find the [room] with a given name in a [map] *)
 let find_room_by_name (m : map) (name : string) : room =
   try List.find (fun (r : room) -> r.name = name) m.rooms
   with Not_found -> fatal rc_Error ("Failed to find room \"" ^ name ^ "\"")
 
+(** Determines which phase of map file parsing is ongoing *)
 type map_parsing_state =
   | MapName
   | RoomNames
@@ -207,6 +214,7 @@ let string_of_parsing_state = function
   | AsciiMap ->
       "ASCII map"
 
+(** Step parsing state forward *)
 let advance_parsing_state = function
   | None ->
       None
@@ -231,6 +239,7 @@ let advance_parsing_state = function
     | AsciiMap ->
         None )
 
+(** Read a map file and parse it into a [map] *)
 let parse_map_file (map_fn : string) : map =
   let room_idx, player_start_idx, ash_start_idx, xeno_start_idx =
     (ref 0, ref (-1), ref (-1), ref (-1))
