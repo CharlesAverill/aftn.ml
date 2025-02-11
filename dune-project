@@ -19,5 +19,5 @@
  (name AFTN)
  (synopsis "")
  (description "Alien: Fate of the Nostromo port")
- (depends ocaml dune alcotest ocamlformat))
+ (depends ocaml dune alcotest ocamlformat odoc))
 
