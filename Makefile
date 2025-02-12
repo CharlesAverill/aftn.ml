@@ -60,6 +60,7 @@ docs: cleandocs build
 	mv $(DOCS_PATH)AFTN/AFTN.html $(DOCS_PATH)index.html
 	mv $(DOCS_PATH)AFTN/AFTN $(DOCS_PATH)module
 	rm -rf $(DOCS_PATH)AFTN
+	cp -r $(DOCS_PATH)odoc.support $(DOCS_PATH)module
 	
 	@echo "Preparing Index\n--------------"
 	# Header
