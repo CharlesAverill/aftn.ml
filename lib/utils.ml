@@ -55,3 +55,31 @@ let update f x y =
     y
   else
     f z
+
+let rec len_partition (l : 'a list) (n : int) : 'a list list =
+  if List.length l > n then
+    List.take n l :: len_partition (List.drop n l) n
+  else
+    [l]
+
+let rec transpose l =
+  match l with
+  | [] ->
+      []
+  | [] :: l' ->
+      transpose l'
+  | (x :: xs) :: l' ->
+      let first_column =
+        x
+        :: List.fold_left
+             (fun a i -> match i with [] -> a | h :: t -> h :: a)
+             [] l'
+      in
+      let rest_columns =
+        transpose
+          ( xs
+          :: List.fold_left
+               (fun a i -> match i with [] -> a | h :: t -> t :: a)
+               [] l' )
+      in
+      first_column :: rest_columns

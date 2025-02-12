@@ -1,5 +1,7 @@
 (** User selections from stdin *)
 
+open Utils
+
 type 'a selection =
   | Back  (** User wants to go back *)
   | Invalid of string option
@@ -10,8 +12,45 @@ type 'a selection =
 let rec get_int_selection (prompt : string) (options : string list)
     (allow_back : bool) : int option =
   print_endline prompt ;
-  List.iteri (fun i -> (Printf.printf "\t%d) %s\n") (i + 1)) options ;
-  if allow_back then print_endline "\tb) Back" ;
+  let options =
+    if allow_back then
+      options @ ["Back"]
+    else
+      options
+  in
+  let cutoff_height = 7 in
+  ( if List.length options <= cutoff_height then
+      List.iteri
+        (fun i ->
+          if allow_back && i = List.length options - 1 then
+            Printf.printf "\t b) %s\n"
+          else
+            (Printf.printf "\t%2d) %s\n") (i + 1) )
+        options
+    else
+      (* Columns of height cutoff_height, rows of length (#options / cutoff_height) *)
+      let col_width = List.length options / cutoff_height in
+      let rows = transpose (len_partition options cutoff_height) in
+      List.iter (fun row -> print_endline (String.concat " - " row)) rows ;
+      let max_len =
+        List.fold_left
+          (fun a o ->
+            if String.length o > a then
+              String.length o
+            else
+              a )
+          0 options
+      in
+      for row = 1 to cutoff_height do
+        for col = 1 to col_width + 1 do
+          let idx = (cutoff_height * (col - 1)) + (row - 1) in
+          if allow_back && idx = List.length options - 1 then
+            Printf.printf "\t b) %-*s" max_len (List.nth options idx)
+          else if idx < List.length options then
+            Printf.printf "\t%2d) %-*s" (1 + idx) max_len (List.nth options idx)
+        done ;
+        print_endline ""
+      done ) ;
   let choice = read_line () in
   match int_of_string_opt choice with
   | Some x ->

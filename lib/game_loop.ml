@@ -98,8 +98,10 @@ let setup_game (n_players : int) (n_characters : int) (use_ash : bool) : unit =
           (* Get random objectives *) } ;
     shuffle_encounters ()
 
+(** TODO : implement *)
 let update_objectives () = ()
 
+(** Possible turn actions *)
 type action =
   | Move
   | PickUp
@@ -117,6 +119,7 @@ type action =
   | DrawMap
   | Exit
 
+(** Get printable [string] representation of an [action] *)
 let string_of_action = function
   | Move ->
       "Move"
@@ -149,6 +152,7 @@ let string_of_action = function
   | Exit ->
       "Exit"
 
+(** List of actions to choose from *)
 let actions =
   [ Move
   ; PickUp
@@ -166,6 +170,7 @@ let actions =
   ; DrawMap
   ; Exit ]
 
+(** Prompt player for room to move to *)
 let character_move (active_character : character) (allowed_moves : room list)
     (allow_back : bool) : room option =
   let ladder =
@@ -181,8 +186,6 @@ let character_move (active_character : character) (allowed_moves : room list)
         List.map (fun r -> r.name) allowed_moves )
     @ match ladder with None -> [] | Some r -> [r.name]
   in
-  print_endline
-    (String.concat ", " (locate_character active_character).connections) ;
   update_objectives () ;
   match
     get_int_selection "Destinations:"
