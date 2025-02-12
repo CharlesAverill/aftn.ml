@@ -26,3 +26,17 @@ type character =
   ; ability: (map -> character -> character list -> ability_output) option
         (** Function that takes in current game state (map, activate character, all characters) and performs an action *)
   }
+
+let ch_eq c1 c2 : bool =
+  c1.first_name = c2.first_name
+  && c1.last_name = c2.last_name
+  && c1.rank = c2.rank
+  && c1.max_actions = c2.max_actions
+  && c1.ability_description = c2.ability_description
+
+let ch_neq c1 c2 = not (ch_eq c1 c2)
+
+let string_of_character (c : character) : string =
+  Printf.sprintf "%s, %s - %s - Actions: %d%s" c.last_name c.first_name c.rank
+    c.max_actions
+    (match c.ability_description with None -> "" | Some s -> " - " ^ s)

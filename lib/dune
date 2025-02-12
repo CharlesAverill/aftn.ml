@@ -9,7 +9,10 @@
   map
   character
   encounter
+  objective
+  item
   game_state
+  game_loop
   ripley
   dallas
   lambert

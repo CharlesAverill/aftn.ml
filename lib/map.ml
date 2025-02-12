@@ -2,23 +2,18 @@
 
 open Utils
 open Logging
+open Item
 
 type room =
-  { (* Name of this room. If None, this room is a corridor *)
-    name: string
-  ; (* If the room is a corridor *)
-    is_corridor: bool
-  ; (* How much scrap is in this room *)
-    num_scrap: int
-  ; (* Whether the room has an event *)
-    has_event: bool
-  ; (* Items in the room *)
-    (* TODO: change to items *)
-    items: unit list
-  ; (* Connected rooms *)
-    connections: room list
-  ; (* Room connected by a ladder *)
-    ladder_connection: room option }
+  { name: string  (** Name of this room. If None, this room is a corridor *)
+  ; is_corridor: bool  (** If the room is a corridor *)
+  ; num_scrap: int  (** How much scrap is in this room *)
+  ; has_event: bool  (** Whether the room has an event *)
+  ; has_coolant: bool  (** Whether the room has coolant *)
+  ; items: item list  (** Items in the room *)
+  ; connections: string list
+        (** Connections denoted by room names - required as opposed to [room list] due to functional update of map *)
+  ; ladder_connection: room option  (** Room connected by a ladder *) }
 
 (** Get [string] representation of [room] *)
 let string_of_room (r : room) =
@@ -27,11 +22,12 @@ let string_of_room (r : room) =
      Is corridor: %b\n\
      Scrap: %n\n\
      Has event: %b\n\
+     Has coolant: %b\n\
      Items: TODO\n\
      Connections: %s\n\
      Ladder connection: %s\n"
-    r.name r.is_corridor r.num_scrap r.has_event
-    (String.concat "," (List.map (fun (r : room) -> r.name) r.connections))
+    r.name r.is_corridor r.num_scrap r.has_event r.has_coolant
+    (String.concat "," r.connections)
     (match r.ladder_connection with None -> "None" | Some s -> s.name)
 
 let blank_room =
@@ -39,6 +35,7 @@ let blank_room =
   ; is_corridor= true
   ; num_scrap= 0
   ; has_event= false
+  ; has_coolant= false
   ; items= []
   ; connections= []
   ; ladder_connection= None }
@@ -63,8 +60,14 @@ type map =
   ; (* ASCII representation of map *)
     ascii_map: string option }
 
+let find_room (m : map) (name : string) : room option =
+  List.find_opt (fun r -> r.name = name) m.rooms
+
 (** Get a [string] representation of a [map] that is equivalent to the input map file *)
 let map_file_of_map m =
+  let find_room x =
+    match find_room m x with None -> blank_room | Some r -> r
+  in
   Printf.sprintf
     "%s\n\
      ---\n\
@@ -120,9 +123,12 @@ let map_file_of_map m =
                    seen
                    (List.fold_left
                       (fun a x -> (r, x) :: (x, r) :: a)
-                      [] r.connections )
+                      []
+                      (List.map find_room r.connections) )
                , let unseen =
-                   List.filter (fun x -> not (seen (x, r))) r.connections
+                   List.filter
+                     (fun x -> not (seen (x, r)))
+                     (List.map find_room r.connections)
                  in
                  if unseen = [] then
                    s
@@ -166,6 +172,9 @@ let map_file_of_map m =
     | Some s ->
         s )
 
+let update_map_room (m : map) (old_room : room) (new_room : room) : map =
+  {m with rooms= replace m.rooms (fun r -> r = old_room) new_room}
+
 let blank_map =
   { map_name= ""
   ; rooms= []
@@ -176,11 +185,6 @@ let blank_map =
   ; event_rooms= []
   ; coolant_rooms= []
   ; ascii_map= None }
-
-(** Find the [room] with a given name in a [map] *)
-let find_room_by_name (m : map) (name : string) : room =
-  try List.find (fun (r : room) -> r.name = name) m.rooms
-  with Not_found -> fatal rc_Error ("Failed to find room \"" ^ name ^ "\"")
 
 (** Determines which phase of map file parsing is ongoing *)
 type map_parsing_state =
@@ -302,50 +306,41 @@ let parse_map_file (map_fn : string) : map =
                    | [] ->
                        m
                    | room_name :: connections ->
-                       let conns_to_add =
-                         List.map
-                           (fun c ->
-                             ( find_room_by_name m room_name
-                             , find_room_by_name m c ) )
-                           connections
-                         @ List.map
-                             (fun c ->
-                               ( find_room_by_name m c
-                               , find_room_by_name m room_name ) )
-                             connections
-                       in
-                       List.iter
-                         (fun ((r1, r2) : room * room) ->
-                           print_endline (r1.name ^ " -> " ^ r2.name) )
-                         conns_to_add ;
                        List.fold_left
-                         (fun m ((r1, r2) : room * room) ->
-                           let old_r1_connections =
-                             List.filter
-                               (fun (x : room) -> x.name != r2.name)
-                               (find_room_by_name m r1.name).connections
-                           in
-                           { m with
-                             rooms=
-                               replace m.rooms
-                                 (fun r -> r.name = r1.name)
-                                 {r1 with connections= old_r1_connections @ [r2]}
-                           } )
-                         m conns_to_add )
+                         (fun m r2_name ->
+                           match
+                             (find_room m room_name, find_room m r2_name)
+                           with
+                           | Some r1, Some r2 ->
+                               update_map_room
+                                 (update_map_room m r1
+                                    { r1 with
+                                      connections= r1.connections @ [r2.name] } )
+                                 r2
+                                 { r2 with
+                                   connections= r2.connections @ [r1.name] }
+                           | _, _ ->
+                               fatal rc_Error
+                                 ( "Tried adding connection to non-declared \
+                                    room " ^ r2_name ) )
+                         m connections )
                  | Ladders -> (
                    match String.split_on_char ';' line with
-                   | [first; second] ->
-                       let first, second =
-                         (find_room_by_name m first, find_room_by_name m second)
-                       in
-                       { m with
-                         rooms=
-                           replace
-                             (replace m.rooms
-                                (fun r -> r.name = first.name)
-                                {first with ladder_connection= Some second} )
-                             (fun r -> r.name = second.name)
-                             {second with ladder_connection= Some first} }
+                   | [first; second] -> (
+                     match (find_room m first, find_room m second) with
+                     | Some first, Some second ->
+                         { m with
+                           rooms=
+                             replace
+                               (replace m.rooms
+                                  (fun r -> r.name = first.name)
+                                  {first with ladder_connection= Some second} )
+                               (fun r -> r.name = second.name)
+                               {second with ladder_connection= Some first} }
+                     | _ ->
+                         fatal rc_Error
+                           ( "Tried to add invalid ladder connection: " ^ first
+                           ^ " - " ^ second ) )
                    | _ ->
                        _log Log_Warning
                          ("Failed to parse ladders line: \"" ^ line ^ "\"") ;
@@ -356,16 +351,38 @@ let parse_map_file (map_fn : string) : map =
                        m
                    | room_names ->
                        { m with
-                         scrap_rooms= List.map (find_room_by_name m) room_names
-                       } )
+                         scrap_rooms=
+                           List.map
+                             (fun x ->
+                               match find_room m x with
+                               | None ->
+                                   _log Log_Warning
+                                     ( "Failed to find room " ^ x
+                                     ^ " in map while determining scrap rooms"
+                                     ) ;
+                                   blank_room
+                               | Some x ->
+                                   x )
+                             room_names } )
                  | EventRooms -> (
                    match String.split_on_char ';' line with
                    | [] ->
                        m
                    | room_names ->
                        { m with
-                         event_rooms= List.map (find_room_by_name m) room_names
-                       } )
+                         event_rooms=
+                           List.map
+                             (fun x ->
+                               match find_room m x with
+                               | None ->
+                                   _log Log_Warning
+                                     ( "Failed to find room " ^ x
+                                     ^ " in map while determining event rooms"
+                                     ) ;
+                                   blank_room
+                               | Some x ->
+                                   x )
+                             room_names } )
                  | CoolantRooms -> (
                    match String.split_on_char ';' line with
                    | [] ->
@@ -373,7 +390,18 @@ let parse_map_file (map_fn : string) : map =
                    | room_names ->
                        { m with
                          coolant_rooms=
-                           List.map (find_room_by_name m) room_names } )
+                           List.map
+                             (fun x ->
+                               match find_room m x with
+                               | None ->
+                                   _log Log_Warning
+                                     ( "Failed to find room " ^ x
+                                     ^ " in map while determining coolant rooms"
+                                     ) ;
+                                   blank_room
+                               | Some x ->
+                                   x )
+                             room_names } )
                  | AsciiMap ->
                      { m with
                        ascii_map=
@@ -384,6 +412,9 @@ let parse_map_file (map_fn : string) : map =
                              Some (s ^ "\n" ^ line) ) } ) ) )
          (Some MapName, blank_map) (read_file_lines map_fn) )
   in
+  (* (
+    (fun m -> (fun r -> List.map (fun c -> List.find_index (fun x -> x.name = ) m.rooms ) r.connections))
+  ); *)
   { pre_reversed with
     rooms= List.rev pre_reversed.rooms
   ; player_start_room=

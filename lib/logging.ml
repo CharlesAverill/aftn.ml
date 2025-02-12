@@ -9,7 +9,7 @@ type log_type =
   | Log_Error
   | Log_Critical
 
-let _GLOBAL_LOG_LEVEL = Log_Debug
+let _GLOBAL_LOG_LEVEL = ref Log_Debug
 
 (** Follows the order in the type definition, \[0:5\]*)
 let int_of_log = function
@@ -32,6 +32,8 @@ type return_code = int * string
 let rc_Ok = (0, "OK")
 
 and rc_Error = (1, "ERROR")
+
+and rc_ArgError = (2, "ARGUMENT ERROR")
 
 (** ANSI encoding for bold text *)
 let ansi_bold = "\x1b[1m"
@@ -82,7 +84,8 @@ let fatal rc message =
 
 (** Prints log statements to stdout/stderr *)
 let _log log_level message =
-  if log_level = Log_None || int_of_log _GLOBAL_LOG_LEVEL > int_of_log log_level
+  if
+    log_level = Log_None || int_of_log !_GLOBAL_LOG_LEVEL > int_of_log log_level
   then
     ()
   else

@@ -11,12 +11,11 @@ let ripley_ability (_ : map) (_ : character) (chars : character list) :
          (fun c ->
            Printf.sprintf "%s at %s\n" c.last_name (locate_character c).name )
          chars )
+      true
   with
-  | Back ->
+  | None ->
       {default_ability_output with used_action= false}
-  | Invalid _ ->
-      (* Never triggered *) default_ability_output
-  | Selected x ->
+  | Some x ->
       let selected_char = List.nth chars x in
       { default_ability_output with
         moved_character_index=
