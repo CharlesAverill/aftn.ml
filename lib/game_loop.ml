@@ -219,10 +219,8 @@ let character_move (active_character : character) (allowed_moves : room list)
   | Some i ->
       find_room !game_state.map (List.nth allowed_moves i)
 
-(** Prompt player for item/scrap to pick up. If an item is selected,
-    (true, Some item) is returned. If scrap is selected, (true, None) is returned.
-    If nothing is selected, or nothing is able to be picked up, (false, None) is 
-    returned.
+(** Prompt player for item/scrap to pick up. If an [item] is selected, [true]
+    is returned to indicate the turn is over, otherwise [false].
 *)
 let pickup (active_character : character) : bool =
   let current_room = locate_character active_character in
@@ -301,14 +299,7 @@ let pickup (active_character : character) : bool =
             true
           ) )
 
-let view_inventory (active_character : character) : unit =
-  print_endline "=====INVENTORY=====" ;
-  Printf.printf "Scrap: %d\n" (!game_state.character_scraps active_character) ;
-  print_endline "Items:" ;
-  List.iter
-    (fun i -> print_endline ("\t" ^ string_of_item i))
-    (!game_state.character_items active_character)
-
+(** Prompt the user to drop an [item] in the [room] they are located in *)
 let drop (active_character : character) : bool =
   let current_room = locate_character active_character in
   if !game_state.character_items active_character = [] then (
@@ -343,6 +334,25 @@ let drop (active_character : character) : bool =
             add_room_item current_room i ;
             true
           ) )
+
+(** Show the active character's inventory *)
+let view_inventory ?(print_name : bool = false) (active_character : character) :
+    unit =
+  Printf.printf "=====%sINVENTORY=====\n"
+    ( if print_name then
+        active_character.last_name ^ " "
+      else
+        "" ) ;
+  Printf.printf "Scrap: %d\n" (!game_state.character_scraps active_character) ;
+  print_endline "Items:" ;
+  List.iter
+    (fun i -> print_endline ("\t" ^ string_of_item i))
+    (!game_state.character_items active_character)
+
+let view_team () : unit =
+  print_endline "=====TEAM=====" ;
+  Printf.printf "Morale: %d\n" !game_state.morale ;
+  List.iter (view_inventory ~print_name:true) !game_state.characters
 
 (** Main game loop *)
 let game_loop () : unit =
@@ -384,13 +394,14 @@ let game_loop () : unit =
               Printf.printf
                 "[SELF-DESTRUCT] The Self-Destruct timer drops to %d!\n" (x - 1)
         | _ ->
+            let end_turn = ref false in
             for action_count = active_character.max_actions downto 1 do
               let action_successful = ref true in
               let first_try = ref true in
-              while !first_try || not !action_successful do
+              while (not !end_turn) && (!first_try || not !action_successful) do
                 first_try := false ;
-                Printf.printf "Actions: %d/%d\n" action_count
-                  active_character.max_actions ;
+                Printf.printf "%s's actions: %d/%d\n" active_character.last_name
+                  action_count active_character.max_actions ;
                 match
                   get_int_selection ~keys:action_select_chars
                     "Choose an action:"
@@ -423,9 +434,53 @@ let game_loop () : unit =
                         action_successful := false
                     | true ->
                         () )
+                  | Ability ->
+                      fatal rc_Error
+                        ( "Action " ^ string_of_action Ability
+                        ^ " is unsupported" )
                   | ViewInventory ->
                       view_inventory active_character ;
                       action_successful := false
+                  | ViewTeam ->
+                      view_team () ;
+                      action_successful := false
+                  | Craft ->
+                      fatal rc_Error
+                        ("Action " ^ string_of_action Craft ^ " is unsupported")
+                  | UseItem ->
+                      fatal rc_Error
+                        ( "Action " ^ string_of_action UseItem
+                        ^ " is unsupported" )
+                  | GiveItem ->
+                      fatal rc_Error
+                        ( "Action " ^ string_of_action GiveItem
+                        ^ " is unsupported" )
+                  | EndTurn ->
+                      if
+                        confirm
+                          (Some
+                             (Printf.sprintf
+                                "Are you sure you want to end %s's turn early? \
+                                 (y/n)"
+                                active_character.last_name ) )
+                      then
+                        end_turn := true
+                      else
+                        action_successful := false
+                  | ViewRoom ->
+                      fatal rc_Error
+                        ( "Action " ^ string_of_action ViewRoom
+                        ^ " is unsupported" )
+                  | ViewCharacterLocations ->
+                      fatal rc_Error
+                        ( "Action "
+                        ^ string_of_action ViewCharacterLocations
+                        ^ " is unsupported" )
+                  | SeeObjectives ->
+                      fatal rc_Error
+                        ( "Action "
+                        ^ string_of_action SeeObjectives
+                        ^ " is unsupported" )
                   | DrawMap ->
                       ( match !game_state.map.ascii_map with
                       | None ->
@@ -440,13 +495,11 @@ let game_loop () : unit =
                       then
                         exit 0
                       else
-                        action_successful := false
-                  | act ->
-                      fatal rc_Error
-                        ("Action " ^ string_of_action act ^ " is unsupported") )
+                        action_successful := false )
                 | None ->
                     ()
               done
             done )
-      !game_state.characters
+      !game_state.characters ;
+    game_state := {!game_state with round_count= !game_state.round_count + 1}
   done
