@@ -10,6 +10,6 @@ let brett : character =
   ; max_actions= 3
   ; ability_description=
       Some
-        "Any item that costs 2 or more Scrap has its cost reduced by 1 Scrap. \
-         Items don't take an action to craft."
+        "Items that costs 2 or more scrap has is 1 scrap cheaper. Items don't \
+         take an action to craft."
   ; ability= None }

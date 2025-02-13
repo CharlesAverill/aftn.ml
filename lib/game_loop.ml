@@ -182,9 +182,9 @@ let actions =
 let action_select_chars =
   ['m'; 'p'; 'd'; 'a'; 'i'; 'k'; 'c'; 'u'; 'g'; 'e'; 'v'; 'l'; 'o'; 'M'; 'x']
 
-(** Prompt player for room to move to, then return it *)
+(** Prompt player for room to move to, return [false] if action canceled *)
 let character_move (active_character : character) (allowed_moves : room list)
-    (allow_back : bool) : room option =
+    (allow_back : bool) : bool =
   let ladder =
     if allowed_moves = [] then
       (locate_character active_character).ladder_connection
@@ -193,13 +193,7 @@ let character_move (active_character : character) (allowed_moves : room list)
   in
   let allowed_moves =
     ( if allowed_moves = [] then
-        List.map
-          (fun s ->
-            if int_of_string_opt s = None then
-              s
-            else
-              "Corridor " ^ s )
-          (locate_character active_character).connections
+        (locate_character active_character).connections
       else
         List.map (fun r -> r.name) allowed_moves )
     @ match ladder with None -> [] | Some r -> [r.name]
@@ -211,13 +205,28 @@ let character_move (active_character : character) (allowed_moves : room list)
          (fun r ->
            r
            ^ match ladder with Some x when x.name = r -> " (ladder)" | _ -> "" )
-         allowed_moves )
+         (List.map
+            (fun s ->
+              if int_of_string_opt s = None then
+                s
+              else
+                "Corridor " ^ s )
+            allowed_moves ) )
       allow_back
   with
   | None ->
-      None
-  | Some i ->
-      find_room !game_state.map (List.nth allowed_moves i)
+      false
+  | Some i -> (
+    match find_room !game_state.map (List.nth allowed_moves i) with
+    | None ->
+        _log Log_Error
+          "find_room in character_move returned None when it shouldn't have" ;
+        false
+    | Some r ->
+        Printf.printf "%s moved from %s to %s\n" active_character.last_name
+          (locate_character active_character).name r.name ;
+        set_character_room active_character r ;
+        true )
 
 (** Prompt player for item/scrap to pick up. If an [item] is selected, [true]
     is returned to indicate the turn is over, otherwise [false].
@@ -229,6 +238,9 @@ let pickup (active_character : character) : bool =
     && !game_state.room_items current_room = []
   then (
     print_endline "This room has no scrap or items to pick up" ;
+    false
+  ) else if List.length (!game_state.character_items active_character) >= 3 then (
+    print_endline (active_character.last_name ^ " cannot carry another item") ;
     false
   ) else
     let pick_up_options =
@@ -243,8 +255,7 @@ let pickup (active_character : character) : bool =
         false
     | Some i when !game_state.num_scrap current_room > 0 && i = 0 ->
         (* Pick up scrap *)
-        Printf.printf "Pick up how much scrap? (Max: %d) "
-          (!game_state.num_scrap current_room) ;
+        Printf.printf "Pick up how much scrap? (blank for all) " ;
         let delta_scrap = ref (-1) in
         let go_back = ref false in
         while !delta_scrap < 0 do
@@ -267,7 +278,8 @@ let pickup (active_character : character) : bool =
                 else
                   delta_scrap := x
         done ;
-        Printf.printf "Picked up %d scrap\n" !delta_scrap ;
+        Printf.printf "%s picked up %d scrap\n" active_character.last_name
+          !delta_scrap ;
         set_character_scrap active_character !delta_scrap ;
         set_room_scrap current_room
           (!game_state.num_scrap current_room - !delta_scrap) ;
@@ -349,10 +361,51 @@ let view_inventory ?(print_name : bool = false) (active_character : character) :
     (fun i -> print_endline ("\t" ^ string_of_item i))
     (!game_state.character_items active_character)
 
+(** Show the team's morale and inventories *)
 let view_team () : unit =
   print_endline "=====TEAM=====" ;
   Printf.printf "Morale: %d\n" !game_state.morale ;
   List.iter (view_inventory ~print_name:true) !game_state.characters
+
+let craft (active_character : character) : bool =
+  let price =
+    if ch_eq active_character brett then
+      fun x ->
+    if cost_of_item x >= 2 then
+      cost_of_item x - 1
+    else
+      cost_of_item x
+    else
+      cost_of_item
+  in
+  if !game_state.character_scraps active_character <= 0 then (
+    print_endline
+      (active_character.last_name ^ " doesn't have any scrap to craft with") ;
+    false
+  ) else if List.length (!game_state.character_items active_character) >= 3 then (
+    print_endline (active_character.last_name ^ " cannot carry another item") ;
+    false
+  ) else
+    let craftable =
+      List.filter
+        (fun i -> price i <= !game_state.character_scraps active_character)
+        craftable_items
+    in
+    match
+      get_int_selection "Craftable items:"
+        (List.map string_of_item craftable)
+        true
+    with
+    | None ->
+        false
+    | Some idx ->
+        let i = List.nth craftable idx in
+        Printf.printf "%s crafted %s\n" active_character.last_name
+          (string_of_item i) ;
+        add_character_item active_character i ;
+        set_character_scrap active_character
+          (!game_state.character_scraps active_character - price i) ;
+        true
 
 (** Main game loop *)
 let game_loop () : unit =
@@ -410,16 +463,11 @@ let game_loop () : unit =
                 with
                 | Some x -> (
                   match List.nth actions x with
-                  | Move -> (
-                    match character_move active_character [] true with
-                    | None ->
+                  | Move ->
+                      if not (character_move active_character [] true) then (
                         print_endline "Canceled move" ;
                         action_successful := false
-                    | Some r ->
-                        Printf.printf "%s moved from %s to %s\n"
-                          active_character.last_name
-                          (locate_character active_character).name r.name ;
-                        set_character_room active_character r )
+                      )
                   | PickUp -> (
                     match pickup active_character with
                     | false ->
@@ -445,8 +493,7 @@ let game_loop () : unit =
                       view_team () ;
                       action_successful := false
                   | Craft ->
-                      fatal rc_Error
-                        ("Action " ^ string_of_action Craft ^ " is unsupported")
+                      action_successful := craft active_character
                   | UseItem ->
                       fatal rc_Error
                         ( "Action " ^ string_of_action UseItem
