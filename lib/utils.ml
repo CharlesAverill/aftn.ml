@@ -49,12 +49,14 @@ let range i j =
   aux j []
 
 (** Functional map update *)
-let update f x y =
+let _update f eq x y =
  fun z ->
-  if x = z then
+  if eq x z then
     y
   else
     f z
+
+let update f x y = _update f (fun x y -> x = y) x y
 
 let rec len_partition (l : 'a list) (n : int) : 'a list list =
   if List.length l > n then

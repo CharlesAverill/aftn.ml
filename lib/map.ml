@@ -7,10 +7,6 @@ open Item
 type room =
   { name: string  (** Name of this room. If None, this room is a corridor *)
   ; is_corridor: bool  (** If the room is a corridor *)
-  ; num_scrap: int  (** How much scrap is in this room *)
-  ; has_event: bool  (** Whether the room has an event *)
-  ; has_coolant: bool  (** Whether the room has coolant *)
-  ; items: item list  (** Items in the room *)
   ; connections: string list
         (** Connections denoted by room names - required as opposed to [room list] due to functional update of map *)
   ; ladder_connection: room option  (** Room connected by a ladder *) }
@@ -20,25 +16,15 @@ let string_of_room (r : room) =
   Printf.sprintf
     "Name: %s\n\
      Is corridor: %b\n\
-     Scrap: %n\n\
-     Has event: %b\n\
-     Has coolant: %b\n\
      Items: TODO\n\
      Connections: %s\n\
      Ladder connection: %s\n"
-    r.name r.is_corridor r.num_scrap r.has_event r.has_coolant
+    r.name r.is_corridor
     (String.concat "," r.connections)
     (match r.ladder_connection with None -> "None" | Some s -> s.name)
 
 let blank_room =
-  { name= ""
-  ; is_corridor= true
-  ; num_scrap= 0
-  ; has_event= false
-  ; has_coolant= false
-  ; items= []
-  ; connections= []
-  ; ladder_connection= None }
+  {name= ""; is_corridor= true; connections= []; ladder_connection= None}
 
 (** Create new non-corridor [room] *)
 let new_room (name : string) : room = {blank_room with name; is_corridor= false}

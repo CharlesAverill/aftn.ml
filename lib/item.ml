@@ -4,6 +4,7 @@ type item =
   | GrappleGun
   | ElectricProd
   | MotionTracker
+  | CoolantCanister
 
 let string_of_item = function
   | Incinerator ->
@@ -16,3 +17,5 @@ let string_of_item = function
       "ELECTRIC PROD"
   | MotionTracker ->
       "MOTION TRACKER"
+  | CoolantCanister ->
+      "COOLANT CANISTER"

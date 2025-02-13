@@ -1,6 +1,7 @@
 (** Character information *)
 
 open Map
+open Utils
 
 (** Information about the state of the game after an ability is used *)
 type ability_output =
@@ -33,6 +34,8 @@ let ch_eq c1 c2 : bool =
   && c1.rank = c2.rank
   && c1.max_actions = c2.max_actions
   && c1.ability_description = c2.ability_description
+
+let ch_update = fun f -> _update f ch_eq
 
 let ch_neq c1 c2 = not (ch_eq c1 c2)
 

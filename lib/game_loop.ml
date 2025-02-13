@@ -1,3 +1,5 @@
+(** Main game loop and player actions *)
+
 open Game_state
 open Map
 open Character
@@ -10,6 +12,7 @@ open Selection
 open Random
 open Objective
 open Logging
+open Item
 
 (** Set up the game state given user preferences *)
 let setup_game (n_players : int) (n_characters : int) (use_ash : bool) : unit =
@@ -23,35 +26,47 @@ let setup_game (n_players : int) (n_characters : int) (use_ash : bool) : unit =
           else
             15
           (* Set up initial morale *) )
-    ; xeno_room= !game_state.map.xeno_start_room (* Place xenomorph *)
+    ; xeno_room=
+        ( match
+            List.find_index
+              (fun x -> x.name = !game_state.map.xeno_start_room.name)
+              !game_state.map.rooms
+          with
+        | None ->
+            -1
+        | Some x ->
+            x )
+        (* Place xenomorph *)
     ; ash_room=
-        ( if use_ash then
-            Some !game_state.map.ash_start_room
-          else
-            None
-          (* Place Ash *) )
-    ; map=
-        { !game_state.map with
-          rooms=
-            List.fold_left
-              (fun a r ->
-                let num_scrap = ref r.num_scrap in
-                let has_event = ref r.has_event in
-                let has_coolant = ref r.has_coolant in
-                if List.exists (fun x -> x = r) !game_state.map.scrap_rooms then
-                  num_scrap := 2 ;
-                if List.exists (fun x -> x = r) !game_state.map.event_rooms then
-                  has_event := true ;
-                if List.exists (fun x -> x = r) !game_state.map.coolant_rooms
-                then
-                  has_coolant := true ;
-                { r with
-                  num_scrap= !num_scrap
-                ; has_event= !has_event
-                ; has_coolant= !has_coolant }
-                :: a )
-              [] !game_state.map.rooms }
-        (* Place initial scrap *) } ;
+        List.find_index
+          (fun x -> x.name = !game_state.map.ash_start_room.name)
+          !game_state.map.rooms
+        (* Place Ash*) } ;
+  List.iter
+    (fun r ->
+      let num_scrap = ref (!game_state.num_scrap r) in
+      let has_event = ref (!game_state.has_event r) in
+      let has_coolant = ref (has_coolant r) in
+      if List.exists (fun x -> x = r) !game_state.map.scrap_rooms then
+        num_scrap := 2 ;
+      if List.exists (fun x -> x = r) !game_state.map.event_rooms then
+        has_event := true ;
+      if List.exists (fun x -> x = r) !game_state.map.coolant_rooms then
+        has_coolant := true ;
+      set_room_scrap r !num_scrap ;
+      set_room_has_event r !has_event ;
+      add_room_item r CoolantCanister )
+    !game_state.map.rooms ;
+  print_endline
+    ( "Scrap: "
+    ^ string_of_int
+        (!game_state.num_scrap
+           ( match find_room !game_state.map "MU-TH-UR" with
+           | None ->
+               print_endline "Couldn't find" ;
+               blank_room
+           | Some x ->
+               x ) ) ) ;
   if n_characters = 5 then (
     add_character ripley !game_state.map.player_start_room ;
     add_character dallas !game_state.map.player_start_room ;
@@ -170,7 +185,7 @@ let actions =
   ; DrawMap
   ; Exit ]
 
-(** Prompt player for room to move to *)
+(** Prompt player for room to move to, then return it *)
 let character_move (active_character : character) (allowed_moves : room list)
     (allow_back : bool) : room option =
   let ladder =
@@ -201,6 +216,88 @@ let character_move (active_character : character) (allowed_moves : room list)
   | Some i ->
       find_room !game_state.map (List.nth allowed_moves i)
 
+(** Prompt player for item/scrap to pick up. If an item is selected,
+    (true, Some item) is returned. If scrap is selected, (true, None) is returned.
+    If nothing is selected, or nothing is able to be picked up, (false, None) is 
+    returned.
+*)
+let pickup (active_character : character) : bool * item option =
+  let current_room = locate_character active_character in
+  if
+    !game_state.num_scrap current_room = 0
+    && !game_state.room_items current_room = []
+  then (
+    print_endline "This room has no scrap or items to pick up" ;
+    (false, None)
+  ) else
+    let pick_up_options =
+      ( if !game_state.num_scrap current_room > 0 then
+          [string_of_int (!game_state.num_scrap current_room) ^ " scrap"]
+        else
+          [] )
+      @ List.map string_of_item (!game_state.room_items current_room)
+    in
+    match get_int_selection "Pick up options:" pick_up_options true with
+    | None ->
+        (false, None)
+    | Some i when !game_state.num_scrap current_room > 0 && i = 0 ->
+        (* Pick up scrap *)
+        Printf.printf "Pick up how much scrap? (Max: %d) "
+          (!game_state.num_scrap current_room) ;
+        let delta_scrap = ref (-1) in
+        let go_back = ref false in
+        while !delta_scrap < 0 do
+          let input = read_line () in
+          if
+            String.lowercase_ascii input = "back"
+            || String.lowercase_ascii input = "b"
+          then (
+            go_back := true ;
+            delta_scrap := 0
+          ) else if input = "" then
+            delta_scrap := !game_state.num_scrap current_room
+          else
+            match int_of_string_opt input with
+            | None ->
+                print_endline "Invalid scrap choice"
+            | Some x ->
+                if x > !game_state.num_scrap current_room then
+                  print_endline "Invalid scrap choice"
+                else
+                  delta_scrap := x
+        done ;
+        Printf.printf "Picked up %d scrap\n" !delta_scrap ;
+        set_character_scrap active_character !delta_scrap ;
+        set_room_scrap current_room
+          (!game_state.num_scrap current_room - !delta_scrap) ;
+        (true, None)
+    | Some i -> (
+      match
+        pop_room_item current_room
+          ( if !game_state.num_scrap current_room > 0 then
+              i - 1
+            else
+              i )
+      with
+      | None ->
+          _log Log_Warning "pop_room_item returned None when it shouldn't" ;
+          (false, None)
+      | Some i ->
+          if
+            i = CoolantCanister
+            && List.exists
+                 (fun x -> x = CoolantCanister)
+                 (!game_state.character_items active_character)
+          then (
+            print_endline
+              ( active_character.last_name ^ " already carries a "
+              ^ string_of_item i ) ;
+            (false, None)
+          ) else (
+            add_character_item active_character i ;
+            (true, Some i)
+          ) )
+
 (** Main game loop *)
 let game_loop () : unit =
   print_endline
@@ -226,7 +323,7 @@ let game_loop () : unit =
       (fun i active_character ->
         game_state :=
           {!game_state with turn_idx= i; active_character= Some active_character} ;
-        Printf.printf "-----Turn %d-----\n" !game_state.turn_idx ;
+        Printf.printf "-----Turn %d-----\n" (1 + !game_state.turn_idx) ;
         match !game_state.self_destruct_count with
         | Some x when i = 0 ->
             game_state := {!game_state with self_destruct_count= Some (x - 1)} ;
@@ -245,6 +342,7 @@ let game_loop () : unit =
               let action_successful = ref true in
               let first_try = ref true in
               while !first_try || not !action_successful do
+                first_try := false ;
                 Printf.printf "Actions: %d/%d\n" action_count
                   active_character.max_actions ;
                 match
@@ -264,6 +362,23 @@ let game_loop () : unit =
                           active_character.last_name
                           (locate_character active_character).name r.name ;
                         set_character_room active_character r )
+                  | PickUp -> (
+                    match pickup active_character with
+                    | false, _ ->
+                        print_endline "Canceled pick up" ;
+                        action_successful := false
+                    | true, Some i ->
+                        add_character_item active_character i
+                    | true, _ ->
+                        () )
+                  | Exit ->
+                      if
+                        confirm
+                          (Some "Are you sure you want to exit the game? (y/n) ")
+                      then
+                        exit 0
+                      else
+                        action_successful := false
                   | act ->
                       fatal rc_Error
                         ("Action " ^ string_of_action act ^ " is unsupported") )
@@ -271,6 +386,5 @@ let game_loop () : unit =
                     ()
               done
             done )
-      !game_state.characters ;
-    broken := true
+      !game_state.characters
   done

@@ -8,7 +8,8 @@ type 'a selection =
       (** User gave an invalid selection, optional error string *)
   | Selected of 'a  (** User selected something *)
 
-(** Given a prompt and a list of options, prompt the user to select an option by index via stdin *)
+(** Given a prompt and a list of options, prompt the user to select an option by 
+    index or matching string via stdin *)
 let rec get_int_selection (prompt : string) (options : string list)
     (allow_back : bool) : int option =
   print_endline prompt ;
@@ -31,7 +32,6 @@ let rec get_int_selection (prompt : string) (options : string list)
       (* Columns of height cutoff_height, rows of length (#options / cutoff_height) *)
       let col_width = List.length options / cutoff_height in
       let rows = transpose (len_partition options cutoff_height) in
-      List.iter (fun row -> print_endline (String.concat " - " row)) rows ;
       let max_len =
         List.fold_left
           (fun a o ->
@@ -54,19 +54,33 @@ let rec get_int_selection (prompt : string) (options : string list)
   let choice = read_line () in
   match int_of_string_opt choice with
   | Some x ->
+      (* Index selection *)
       if x - 1 < List.length options then
         Some (x - 1)
       else (
         print_endline ("Invalid selection \"" ^ choice ^ "\"") ;
         get_int_selection prompt options allow_back
       )
-  | None ->
-      if choice = "b" && allow_back then
+  | None -> (
+      if
+        (* Check for back selection *)
+        ( String.lowercase_ascii choice = "b"
+        || String.lowercase_ascii choice = "back" )
+        && allow_back
+      then
         None
-      else (
-        print_endline ("Invalid selection \"" ^ choice ^ "\"") ;
-        get_int_selection prompt options allow_back
-      )
+      else
+        (* Check for matching string selection *)
+          match
+            List.find_opt
+              (fun s -> String.lowercase_ascii s = String.lowercase_ascii choice)
+              options
+          with
+        | None ->
+            print_endline ("Invalid selection \"" ^ choice ^ "\"") ;
+            get_int_selection prompt options allow_back
+        | Some o ->
+            List.find_index (fun s -> s = o) options )
 
 (** A yes-or-no confirmation with a customizable prompt *)
 let rec confirm (prompt : string option) : bool =
