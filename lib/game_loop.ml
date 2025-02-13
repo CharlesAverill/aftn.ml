@@ -221,14 +221,14 @@ let character_move (active_character : character) (allowed_moves : room list)
     If nothing is selected, or nothing is able to be picked up, (false, None) is 
     returned.
 *)
-let pickup (active_character : character) : bool * item option =
+let pickup (active_character : character) : bool =
   let current_room = locate_character active_character in
   if
     !game_state.num_scrap current_room = 0
     && !game_state.room_items current_room = []
   then (
     print_endline "This room has no scrap or items to pick up" ;
-    (false, None)
+    false
   ) else
     let pick_up_options =
       ( if !game_state.num_scrap current_room > 0 then
@@ -239,7 +239,7 @@ let pickup (active_character : character) : bool * item option =
     in
     match get_int_selection "Pick up options:" pick_up_options true with
     | None ->
-        (false, None)
+        false
     | Some i when !game_state.num_scrap current_room > 0 && i = 0 ->
         (* Pick up scrap *)
         Printf.printf "Pick up how much scrap? (Max: %d) "
@@ -270,7 +270,7 @@ let pickup (active_character : character) : bool * item option =
         set_character_scrap active_character !delta_scrap ;
         set_room_scrap current_room
           (!game_state.num_scrap current_room - !delta_scrap) ;
-        (true, None)
+        true
     | Some i -> (
       match
         pop_room_item current_room
@@ -281,7 +281,7 @@ let pickup (active_character : character) : bool * item option =
       with
       | None ->
           _log Log_Warning "pop_room_item returned None when it shouldn't" ;
-          (false, None)
+          false
       | Some i ->
           if
             i = CoolantCanister
@@ -292,10 +292,45 @@ let pickup (active_character : character) : bool * item option =
             print_endline
               ( active_character.last_name ^ " already carries a "
               ^ string_of_item i ) ;
-            (false, None)
+            false
           ) else (
             add_character_item active_character i ;
-            (true, Some i)
+            true
+          ) )
+
+let drop (active_character : character) : bool =
+  let current_room = locate_character active_character in
+  if !game_state.character_items active_character = [] then (
+    print_endline (active_character.last_name ^ " has no items to drop") ;
+    false
+  ) else
+    match
+      get_int_selection "Which item to drop?"
+        (List.map string_of_item (!game_state.character_items active_character))
+        true
+    with
+    | None ->
+        false
+    | Some idx -> (
+      match pop_character_item active_character idx with
+      | None ->
+          _log Log_Error
+            "pop_character_item returned None when it shouldn't have" ;
+          false
+      | Some i ->
+          if
+            i = CoolantCanister
+            && List.exists
+                 (fun i -> i = CoolantCanister)
+                 (!game_state.room_items current_room)
+          then (
+            print_endline
+              ( current_room.name ^ " already contains a "
+              ^ string_of_item CoolantCanister ) ;
+            false
+          ) else (
+            add_room_item current_room i ;
+            true
           ) )
 
 (** Main game loop *)
@@ -364,12 +399,17 @@ let game_loop () : unit =
                         set_character_room active_character r )
                   | PickUp -> (
                     match pickup active_character with
-                    | false, _ ->
+                    | false ->
                         print_endline "Canceled pick up" ;
                         action_successful := false
-                    | true, Some i ->
-                        add_character_item active_character i
-                    | true, _ ->
+                    | true ->
+                        () )
+                  | Drop -> (
+                    match drop active_character with
+                    | false ->
+                        print_endline "Canceled drop" ;
+                        action_successful := false
+                    | true ->
                         () )
                   | Exit ->
                       if

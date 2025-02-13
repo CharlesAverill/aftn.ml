@@ -113,12 +113,15 @@ let set_character_room (c : character) (r : room) : unit =
         { !game_state with
           character_rooms= ch_update !game_state.character_rooms c idx }
 
+(** Set the number of scrap in a [room] *)
 let set_room_scrap (r : room) (n : int) : unit =
   game_state := {!game_state with num_scrap= update !game_state.num_scrap r n}
 
+(** Set whether a room has an [event] *)
 let set_room_has_event (r : room) (b : bool) : unit =
   game_state := {!game_state with has_event= update !game_state.has_event r b}
 
+(** Check whether a room contains coolant *)
 let has_coolant (r : room) : bool =
   List.exists (fun x -> x = CoolantCanister) (!game_state.room_items r)
 
@@ -167,15 +170,25 @@ let add_character_item (c : character) (i : item) : unit =
           (i :: !game_state.character_items c) }
 
 let remove_character_item (c : character) (i : item) : unit =
-  let item_idx =
-    List.find_index (fun x -> x = i) (!game_state.character_items c)
-  in
-  let items' =
-    List.filteri (fun x _ -> Some x != item_idx) (!game_state.character_items c)
-  in
-  game_state :=
-    { !game_state with
-      character_items= ch_update !game_state.character_items c items' }
+  match List.find_index (fun x -> x = i) (!game_state.character_items c) with
+  | None ->
+      _log Log_Error
+        (Printf.sprintf "Failed to remove item %s from %s" (string_of_item i)
+           c.last_name )
+  | Some item_idx ->
+      let items' =
+        List.filteri (fun x _ -> x != item_idx) (!game_state.character_items c)
+      in
+      game_state :=
+        { !game_state with
+          character_items= ch_update !game_state.character_items c items' }
+
+let pop_character_item (c : character) (idx : int) : item option =
+  match List.nth_opt (!game_state.character_items c) idx with
+  | None ->
+      None
+  | Some x ->
+      remove_character_item c x ; Some x
 
 (** Shuffle the list of random [encounter]s *)
 let shuffle_encounters () : unit =
