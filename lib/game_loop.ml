@@ -57,16 +57,6 @@ let setup_game (n_players : int) (n_characters : int) (use_ash : bool) : unit =
       set_room_has_event r !has_event ;
       add_room_item r CoolantCanister )
     !game_state.map.rooms ;
-  print_endline
-    ( "Scrap: "
-    ^ string_of_int
-        (!game_state.num_scrap
-           ( match find_room !game_state.map "MU-TH-UR" with
-           | None ->
-               print_endline "Couldn't find" ;
-               blank_room
-           | Some x ->
-               x ) ) ) ;
   if n_characters = 5 then (
     add_character ripley !game_state.map.player_start_room ;
     add_character dallas !game_state.map.player_start_room ;
@@ -104,6 +94,10 @@ let setup_game (n_players : int) (n_characters : int) (use_ash : bool) : unit =
               (fun c -> ch_neq c (List.nth !char_options n))
               !char_options
     done ;
+    print_endline "Characters:" ;
+    List.iteri
+      (fun i c -> Printf.printf "\t%d) %s\n" (i + 1) c.last_name)
+      !game_state.characters ;
     game_state :=
       { !game_state with
         objectives=
@@ -185,6 +179,9 @@ let actions =
   ; DrawMap
   ; Exit ]
 
+let action_select_chars =
+  ['m'; 'p'; 'd'; 'a'; 'i'; 'k'; 'c'; 'u'; 'g'; 'e'; 'v'; 'l'; 'o'; 'M'; 'x']
+
 (** Prompt player for room to move to, then return it *)
 let character_move (active_character : character) (allowed_moves : room list)
     (allow_back : bool) : room option =
@@ -196,7 +193,13 @@ let character_move (active_character : character) (allowed_moves : room list)
   in
   let allowed_moves =
     ( if allowed_moves = [] then
-        (locate_character active_character).connections
+        List.map
+          (fun s ->
+            if int_of_string_opt s = None then
+              s
+            else
+              "Corridor " ^ s )
+          (locate_character active_character).connections
       else
         List.map (fun r -> r.name) allowed_moves )
     @ match ladder with None -> [] | Some r -> [r.name]
@@ -298,6 +301,14 @@ let pickup (active_character : character) : bool =
             true
           ) )
 
+let view_inventory (active_character : character) : unit =
+  print_endline "=====INVENTORY=====" ;
+  Printf.printf "Scrap: %d\n" (!game_state.character_scraps active_character) ;
+  print_endline "Items:" ;
+  List.iter
+    (fun i -> print_endline ("\t" ^ string_of_item i))
+    (!game_state.character_items active_character)
+
 let drop (active_character : character) : bool =
   let current_room = locate_character active_character in
   if !game_state.character_items active_character = [] then (
@@ -381,7 +392,8 @@ let game_loop () : unit =
                 Printf.printf "Actions: %d/%d\n" action_count
                   active_character.max_actions ;
                 match
-                  get_int_selection "Choose an action:"
+                  get_int_selection ~keys:action_select_chars
+                    "Choose an action:"
                     (List.map string_of_action actions)
                     false
                 with
@@ -411,6 +423,16 @@ let game_loop () : unit =
                         action_successful := false
                     | true ->
                         () )
+                  | ViewInventory ->
+                      view_inventory active_character ;
+                      action_successful := false
+                  | DrawMap ->
+                      ( match !game_state.map.ascii_map with
+                      | None ->
+                          print_endline "No ASCII map to print"
+                      | Some s ->
+                          print_endline s ) ;
+                      action_successful := false
                   | Exit ->
                       if
                         confirm
