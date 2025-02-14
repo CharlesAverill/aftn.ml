@@ -28,10 +28,12 @@ let rec get_int_selection ?(keys : char list = []) (prompt : string)
     (options : string list) (allow_back : bool) : int option =
   if List.exists (fun c -> c = 'b') keys then
     _log Log_Warning "get_int_selection ?keys should not contain 'b'" ;
-  if keys != [] && List.length keys != List.length options then (
-    _log Log_Error "get_int_selection ?keys must be same length as options" ;
-    None
-  ) else (
+  if keys != [] && List.length keys != List.length options then
+    fatal rc_Error
+      (Printf.sprintf
+         "get_int_selection ?keys must be same length as options, got %d and %d"
+         (List.length keys) (List.length options) )
+  else (
     print_endline prompt ;
     let options =
       if allow_back then

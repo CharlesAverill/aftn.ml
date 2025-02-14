@@ -100,6 +100,7 @@ let add_character (c : character) (r : room) : unit =
       game_state :=
         { !game_state with
           characters= !game_state.characters @ [c]
+        ; character_items= ch_update !game_state.character_items c [Flashlight]
         ; character_rooms= ch_update !game_state.character_rooms c idx
         ; character_scraps= ch_update !game_state.character_scraps c 0 }
 
@@ -183,6 +184,7 @@ let remove_character_item (c : character) (i : item) : unit =
         { !game_state with
           character_items= ch_update !game_state.character_items c items' }
 
+(** Remove an item from a character and return it *)
 let pop_character_item (c : character) (idx : int) : item option =
   match List.nth_opt (!game_state.character_items c) idx with
   | None ->

@@ -9,7 +9,7 @@ type room =
   ; is_corridor: bool  (** If the room is a corridor *)
   ; connections: string list
         (** Connections denoted by room names - required as opposed to [room list] due to functional update of map *)
-  ; ladder_connection: room option  (** Room connected by a ladder *) }
+  ; ladder_connection: string option  (** Room connected by a ladder *) }
 
 (** Get [string] representation of [room] *)
 let string_of_room (r : room) =
@@ -21,7 +21,7 @@ let string_of_room (r : room) =
      Ladder connection: %s\n"
     r.name r.is_corridor
     (String.concat "," r.connections)
-    (match r.ladder_connection with None -> "None" | Some s -> s.name)
+    (match r.ladder_connection with None -> "None" | Some s -> s)
 
 let blank_room =
   {name= ""; is_corridor= true; connections= []; ladder_connection= None}
@@ -138,11 +138,11 @@ let map_file_of_map m =
                      (seen, s)
                  | Some lc ->
                      ( (fun x ->
-                         if x.name = lc.name then
+                         if x.name = lc then
                            true
                          else
                            seen x )
-                     , s ^ r.name ^ ";" ^ lc.name ^ "\n" ) )
+                     , s ^ r.name ^ ";" ^ lc ^ "\n" ) )
              ((fun _ -> false), "")
              m.rooms ) ) )
     (* Scrap rooms *)
@@ -320,9 +320,11 @@ let parse_map_file (map_fn : string) : map =
                              replace
                                (replace m.rooms
                                   (fun r -> r.name = first.name)
-                                  {first with ladder_connection= Some second} )
+                                  { first with
+                                    ladder_connection= Some second.name } )
                                (fun r -> r.name = second.name)
-                               {second with ladder_connection= Some first} }
+                               {second with ladder_connection= Some first.name}
+                         }
                      | _ ->
                          fatal rc_Error
                            ( "Tried to add invalid ladder connection: " ^ first

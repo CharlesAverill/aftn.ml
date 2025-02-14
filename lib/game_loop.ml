@@ -55,7 +55,7 @@ let setup_game (n_players : int) (n_characters : int) (use_ash : bool) : unit =
         has_coolant := true ;
       set_room_scrap r !num_scrap ;
       set_room_has_event r !has_event ;
-      add_room_item r CoolantCanister )
+      if !has_coolant then add_room_item r CoolantCanister )
     !game_state.map.rooms ;
   if n_characters = 5 then (
     add_character ripley !game_state.map.player_start_room ;
@@ -120,7 +120,7 @@ type action =
   | ViewTeam
   | Craft
   | UseItem
-  | GiveItem
+  | TradeItem
   | EndTurn
   | ViewRoom
   | ViewCharacterLocations
@@ -146,8 +146,8 @@ let string_of_action = function
       "Craft item"
   | UseItem ->
       "Use item"
-  | GiveItem ->
-      "Give item"
+  | TradeItem ->
+      "Trade item"
   | EndTurn ->
       "End turn early"
   | ViewRoom ->
@@ -171,7 +171,23 @@ let actions =
   ; ViewTeam
   ; Craft
   ; UseItem
-  ; GiveItem
+  ; TradeItem
+  ; EndTurn
+  ; ViewRoom
+  ; ViewCharacterLocations
+  ; SeeObjectives
+  ; DrawMap
+  ; Exit ]
+
+let single_player_actions =
+  [ Move
+  ; PickUp
+  ; Drop
+  ; Ability
+  ; ViewInventory
+  ; ViewTeam
+  ; Craft
+  ; UseItem
   ; EndTurn
   ; ViewRoom
   ; ViewCharacterLocations
@@ -180,7 +196,10 @@ let actions =
   ; Exit ]
 
 let action_select_chars =
-  ['m'; 'p'; 'd'; 'a'; 'i'; 'k'; 'c'; 'u'; 'g'; 'e'; 'v'; 'l'; 'o'; 'M'; 'x']
+  ['m'; 'p'; 'd'; 'a'; 'i'; 'k'; 'c'; 'u'; 't'; 'e'; 'v'; 'l'; 'o'; 'M'; 'x']
+
+let single_player_action_select_chars =
+  ['m'; 'p'; 'd'; 'a'; 'i'; 'k'; 'c'; 'u'; 'e'; 'v'; 'l'; 'o'; 'M'; 'x']
 
 (** Prompt player for room to move to, return [false] if action canceled *)
 let character_move (active_character : character) (allowed_moves : room list)
@@ -196,15 +215,14 @@ let character_move (active_character : character) (allowed_moves : room list)
         (locate_character active_character).connections
       else
         List.map (fun r -> r.name) allowed_moves )
-    @ match ladder with None -> [] | Some r -> [r.name]
+    @ match ladder with None -> [] | Some r -> [r]
   in
   update_objectives () ;
   match
     get_int_selection "Destinations:"
       (List.map
          (fun r ->
-           r
-           ^ match ladder with Some x when x.name = r -> " (ladder)" | _ -> "" )
+           r ^ match ladder with Some x when x = r -> " (ladder)" | _ -> "" )
          (List.map
             (fun s ->
               if int_of_string_opt s = None then
@@ -324,6 +342,7 @@ let drop (active_character : character) : bool =
         true
     with
     | None ->
+        print_endline "Canceled drop" ;
         false
     | Some idx -> (
       match pop_character_item active_character idx with
@@ -367,6 +386,7 @@ let view_team () : unit =
   Printf.printf "Morale: %d\n" !game_state.morale ;
   List.iter (view_inventory ~print_name:true) !game_state.characters
 
+(** Prompt the user to craft an item with scrap and add it to the active character's inventory *)
 let craft (active_character : character) : bool =
   let price =
     if ch_eq active_character brett then
@@ -406,6 +426,233 @@ let craft (active_character : character) : bool =
         set_character_scrap active_character
           (!game_state.character_scraps active_character - price i) ;
         true
+
+(** Performs the trade action between two characters *)
+let perform_trade (giver : character) (receiever : character) : bool =
+  let givable_items =
+    List.filter
+      (fun i ->
+        if
+          i = CoolantCanister
+          && List.exists
+               (fun x -> x = CoolantCanister)
+               (!game_state.character_items receiever)
+        then
+          false
+        else
+          true )
+      (!game_state.character_items giver)
+  in
+  let num_scrap = !game_state.character_scraps giver in
+  match
+    get_int_selection
+      (Printf.sprintf "What will %s give to %s?" giver.last_name
+         receiever.last_name )
+      ( ( if num_scrap > 0 then
+            [Printf.sprintf "%d scrap" num_scrap]
+          else
+            [] )
+      @ List.map string_of_item givable_items )
+      true
+  with
+  | None ->
+      false
+  | Some idx when idx = 0 && num_scrap > 0 ->
+      let to_give = ref (-1) in
+      let go_back = ref false in
+      while !to_give < 0 do
+        Printf.printf "How much scrap to give? Max: %d ('b' to go back) "
+          num_scrap ;
+        let input = String.lowercase_ascii (String.trim (read_line ())) in
+        match int_of_string_opt input with
+        | None when input = "b" ->
+            go_back := true ;
+            to_give := 1
+        | None ->
+            ()
+        | Some x when x > num_scrap ->
+            ()
+        | Some x ->
+            to_give := min x num_scrap
+      done ;
+      if !go_back then
+        false
+      else (
+        Printf.printf "%s gave %d scrap to %s\n" giver.last_name !to_give
+          receiever.last_name ;
+        set_character_scrap giver (!game_state.character_scraps giver - !to_give) ;
+        set_character_scrap receiever
+          (!game_state.character_scraps receiever + !to_give) ;
+        true
+      )
+  | Some idx -> (
+      let idx =
+        if num_scrap > 0 then
+          idx - 1
+        else
+          idx
+      in
+      match pop_character_item giver idx with
+      | None ->
+          _log Log_Error
+            "pop_character_item in trade_item returned None when it shouldn't \
+             have" ;
+          false
+      | Some i ->
+          Printf.printf "%s gave %s %s to %s\n" giver.last_name
+            (article_of_item i) (string_of_item i) receiever.last_name ;
+          add_character_item receiever i ;
+          true )
+
+(** Prompt user to trade items with another character *)
+let trade_item (active_character : character) : bool =
+  let potential_receivers =
+    List.filter
+      (fun c ->
+        (not (ch_eq active_character c))
+        && !game_state.character_rooms c
+           = !game_state.character_rooms active_character
+        && ( !game_state.character_scraps active_character > 0
+           || List.length (!game_state.character_items active_character) > 0
+              && List.length (!game_state.character_items c) < 3
+              &&
+              if
+                List.length
+                  (List.filter
+                     (fun i -> i = CoolantCanister)
+                     (!game_state.character_items active_character) )
+                = 1
+              then
+                not
+                  (List.exists
+                     (fun i -> i = CoolantCanister)
+                     (!game_state.character_items c) )
+              else
+                true ) )
+      !game_state.characters
+  in
+  let potential_givers =
+    List.filter
+      (fun c ->
+        (not (ch_eq c active_character))
+        && !game_state.character_rooms active_character
+           = !game_state.character_rooms c
+        && ( !game_state.character_scraps c > 0
+           || List.length (!game_state.character_items c) > 0
+              && List.length (!game_state.character_items active_character) < 3
+              &&
+              if
+                List.length
+                  (List.filter
+                     (fun i -> i = CoolantCanister)
+                     (!game_state.character_items c) )
+                = 1
+              then
+                not
+                  (List.exists
+                     (fun i -> i = CoolantCanister)
+                     (!game_state.character_items active_character) )
+              else
+                true ) )
+      !game_state.characters
+  in
+  let all =
+    List.fold_left
+      (fun seen c ->
+        if List.mem c seen then
+          seen
+        else
+          c :: seen )
+      []
+      (potential_givers @ potential_receivers)
+  in
+  if List.length all = 0 then (
+    print_endline "There is nobody to trade with" ;
+    false
+  ) else
+    match
+      get_int_selection "Which character would you like to trade with?"
+        (List.map
+           (fun c ->
+             c.last_name ^ " - "
+             ^ String.concat ", "
+                 ( ( if List.exists (ch_eq c) potential_receivers then
+                       ["Give"]
+                     else
+                       [] )
+                 @
+                 if List.exists (ch_eq c) potential_givers then
+                   ["Take"]
+                 else
+                   [] ) )
+           all )
+        true
+    with
+    | None ->
+        false
+    | Some idx -> (
+        let trade_char = List.nth all idx in
+        let options =
+          ( if List.exists (ch_eq trade_char) potential_receivers then
+              ["Give"]
+            else
+              [] )
+          @
+          if List.exists (ch_eq trade_char) potential_givers then
+            ["Take"]
+          else
+            []
+        in
+        match
+          if List.length options = 1 then
+            Some (List.nth options 0)
+          else
+            match
+              get_int_selection "Which trade action would you like to take?"
+                options true
+            with
+            | None ->
+                None
+            | Some x ->
+                Some (List.nth options x)
+        with
+        | Some "Give" ->
+            perform_trade active_character trade_char
+        | Some "Take" ->
+            perform_trade trade_char active_character
+        | _ ->
+            false )
+
+(** Print out room information *)
+let view_room (active_character : character) : unit =
+  let current_room = locate_character active_character in
+  Printf.printf "=====%s=====\n"
+    ( if current_room.is_corridor then
+        "Corridor " ^ current_room.name
+      else
+        current_room.name ) ;
+  Printf.printf "Has event: %b\n" (!game_state.has_event current_room) ;
+  Printf.printf "Scrap: %d\n" (!game_state.num_scrap current_room) ;
+  Printf.printf "%s\n"
+    ( if !game_state.room_items current_room = [] then
+        "No items"
+      else
+        "Items:" ) ;
+  List.iteri
+    (fun idx i -> Printf.printf "\t%d) %s\n" idx (string_of_item i))
+    (!game_state.room_items current_room) ;
+  Printf.printf "Connections: \n" ;
+  List.iteri
+    (fun i -> Printf.printf "\t%d) %s\n" (i + 1))
+    (List.map
+       (fun x ->
+         match int_of_string_opt x with None -> x | Some _ -> "Corridor " ^ x )
+       current_room.connections ) ;
+  match current_room.ladder_connection with
+  | None ->
+      ()
+  | Some s ->
+      Printf.printf "Ladder connection: %s\n" s
 
 (** Main game loop *)
 let game_loop () : unit =
@@ -456,18 +703,35 @@ let game_loop () : unit =
                 Printf.printf "%s's actions: %d/%d\n" active_character.last_name
                   action_count active_character.max_actions ;
                 match
-                  get_int_selection ~keys:action_select_chars
+                  get_int_selection
+                    ~keys:
+                      ( if List.length !game_state.characters > 1 then
+                          action_select_chars
+                        else
+                          single_player_action_select_chars )
                     "Choose an action:"
-                    (List.map string_of_action actions)
+                    (List.map string_of_action
+                       ( if List.length !game_state.characters > 1 then
+                           actions
+                         else
+                           single_player_actions ) )
                     false
                 with
                 | Some x -> (
-                  match List.nth actions x with
+                  match
+                    List.nth
+                      ( if List.length !game_state.characters > 1 then
+                          actions
+                        else
+                          single_player_actions )
+                      x
+                  with
                   | Move ->
                       if not (character_move active_character [] true) then (
                         print_endline "Canceled move" ;
                         action_successful := false
-                      )
+                      ) else
+                        action_successful := true
                   | PickUp -> (
                     match pickup active_character with
                     | false ->
@@ -475,13 +739,8 @@ let game_loop () : unit =
                         action_successful := false
                     | true ->
                         () )
-                  | Drop -> (
-                    match drop active_character with
-                    | false ->
-                        print_endline "Canceled drop" ;
-                        action_successful := false
-                    | true ->
-                        () )
+                  | Drop ->
+                      action_successful := drop active_character
                   | Ability ->
                       fatal rc_Error
                         ( "Action " ^ string_of_action Ability
@@ -498,10 +757,11 @@ let game_loop () : unit =
                       fatal rc_Error
                         ( "Action " ^ string_of_action UseItem
                         ^ " is unsupported" )
-                  | GiveItem ->
-                      fatal rc_Error
-                        ( "Action " ^ string_of_action GiveItem
-                        ^ " is unsupported" )
+                  | TradeItem ->
+                      if not (trade_item active_character) then (
+                        print_endline "Trade canceled" ;
+                        action_successful := false
+                      )
                   | EndTurn ->
                       if
                         confirm
@@ -515,9 +775,8 @@ let game_loop () : unit =
                       else
                         action_successful := false
                   | ViewRoom ->
-                      fatal rc_Error
-                        ( "Action " ^ string_of_action ViewRoom
-                        ^ " is unsupported" )
+                      view_room active_character ;
+                      action_successful := false
                   | ViewCharacterLocations ->
                       fatal rc_Error
                         ( "Action "

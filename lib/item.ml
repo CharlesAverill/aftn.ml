@@ -20,6 +20,13 @@ let string_of_item = function
   | CoolantCanister ->
       "COOLANT CANISTER"
 
+(** Which indefinite article to use when referring to the item *)
+let article_of_item = function
+  | Incinerator | ElectricProd ->
+      "an"
+  | Flashlight | GrappleGun | MotionTracker | CoolantCanister ->
+      "a"
+
 let cost_of_item = function
   | Flashlight ->
       2
