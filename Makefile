@@ -60,13 +60,14 @@ docs: cleandocs build
 	mv $(DOCS_PATH)AFTN/AFTN.html $(DOCS_PATH)index.html
 	mv $(DOCS_PATH)AFTN/AFTN $(DOCS_PATH)module
 	rm -rf $(DOCS_PATH)AFTN
+	cp game_data/materials/favicon.ico $(DOCS_PATH)
 	cp -r $(DOCS_PATH)odoc.support $(DOCS_PATH)module
 	
 	@echo "Preparing Index\n--------------"
 	# Header
 	sed -i 's/<title>.*<\/title>/<title>$(DOCS_INDEX_TITLE)<\/title>/g' $(DOCS_PATH)index.html
 	sed -i 's@</head>@$(DOCS_EMBED)\n</head>@g' $(DOCS_PATH)index.html
-	sed -i 's/..\/odoc.support/odoc.support/g' $(DOCS_PATH)index.html
+	# sed -i 's/..\/odoc.support/odoc.support/g' $(DOCS_PATH)index.html
 
 push: cleandocs build
 	@read -p "Commit message: " input; \
