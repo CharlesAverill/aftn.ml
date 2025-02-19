@@ -7,3 +7,5 @@
 Alien: Fate of the Nostromo port in OCaml.
 
 Code documentation: {:./module/index.html}
+
+Build date: AFTN_BUILD_DATE
