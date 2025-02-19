@@ -68,7 +68,7 @@ docs: cleandocs build
 	# Header
 	sed -i 's/<title>.*<\/title>/<title>$(DOCS_INDEX_TITLE)<\/title>/g' $(DOCS_PATH)index.html
 	sed -i 's@</head>@$(DOCS_EMBED)\n</head>@g' $(DOCS_PATH)index.html
-	sed -i 's/..\/odoc.support/odoc.support/g' $(DOCS_PATH)index.html
+	#sed -i 's/..\/odoc.support/odoc.support/g' $(DOCS_PATH)index.html
 	sed -i 's/AFTN_BUILD_DATE/$(DATE)/g' $(DOCS_PATH)index.html
 
 push: cleandocs build
