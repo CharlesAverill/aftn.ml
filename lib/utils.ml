@@ -1,10 +1,19 @@
 (** Standard utilities *)
+open Logging
 
 (** Shuffle a [list] *)
 let shuffle d =
   let nd = List.map (fun c -> (Random.bits (), c)) d in
   let sond = List.sort compare nd in
   List.map snd sond
+
+(** Select an item from random in a list *)
+let select_random l =
+  match l with
+  | [] ->
+      fatal rc_Error "Tried to select from empty list"
+  | _ ->
+      List.nth l (Random.int_in_range ~min:0 ~max:(List.length l - 1))
 
 (** Replace in a [list] by index *)
 let replacei l pos a =

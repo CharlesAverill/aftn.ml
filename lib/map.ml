@@ -414,3 +414,168 @@ let parse_map_file (map_fn : string) : map =
   ; xeno_start_room=
       List.nth pre_reversed.rooms
         (List.length pre_reversed.rooms - !xeno_start_idx - 1) }
+
+(** Map room names to corresponding search parameters *)
+type search_params =
+  { distance: string -> int
+  ; discovered: string -> bool
+  ; previous_room: string -> string }
+
+let active_search_params : search_params ref =
+  ref
+    { distance= (fun _ -> 0)
+    ; discovered= (fun _ -> false)
+    ; previous_room= (fun _ -> "") }
+
+let set_room_distance (r : room) (dist : int) : unit =
+  active_search_params :=
+    { !active_search_params with
+      distance= update !active_search_params.distance r.name dist }
+
+let discover_room (r : room) : unit =
+  active_search_params :=
+    { !active_search_params with
+      discovered= update !active_search_params.discovered r.name true }
+
+let set_previous_room (r : room) (prev : room) : unit =
+  active_search_params :=
+    { !active_search_params with
+      previous_room= update !active_search_params.previous_room r.name prev.name
+    }
+
+let reset_search (dist : int) : unit =
+  active_search_params :=
+    { distance= (fun _ -> dist)
+    ; discovered= (fun _ -> false)
+    ; previous_room= (fun _ -> "") }
+
+let shortest_path (m : map) (source : room) (dest : room) : room list =
+  reset_search (Int32.to_int Int32.max_int) ;
+  set_room_distance source 0 ;
+  let queue = ref m.rooms in
+  while List.length !queue > 0 do
+    match !queue with
+    | [] ->
+        unreachable ()
+    | h :: t ->
+        (* u is node with minimum distance *)
+        let min_node_dist, u =
+          List.fold_left
+            (fun (min_node_dist, min_node) r ->
+              if !active_search_params.distance r.name < min_node_dist then
+                (!active_search_params.distance r.name, r)
+              else
+                (min_node_dist, min_node) )
+            (Int.max_int, h) !queue
+        in
+        discover_room u ;
+        (* Remove closest node from queue *)
+        queue := List.filter (fun r -> r.name != u.name) !queue ;
+        (* Update weights of neighbors of u still in queue *)
+        List.iter
+          (fun r ->
+            let alt = min_node_dist + 1 in
+            if alt < !active_search_params.distance r.name then (
+              set_room_distance r alt ; set_previous_room r u
+            ) )
+          (List.map
+             (fun r ->
+               match find_room m r with
+               | None ->
+                   fatal rc_Error
+                     "shortest_path couldn't find room at distance update"
+               | Some x ->
+                   x )
+             (List.filter
+                (fun r -> List.exists (fun r' -> r = r'.name) !queue)
+                ( u.connections
+                @ match u.ladder_connection with None -> [] | Some s -> [s] ) ) )
+  done ;
+  let shortest : room list option ref = ref None in
+  let u = ref (Some dest) in
+  while !u != None do
+    let s = match !shortest with None -> [] | Some l -> l in
+    match !u with
+    | None ->
+        unreachable ()
+    | Some x -> (
+        shortest := Some (x :: s) ;
+        match find_room m (!active_search_params.previous_room x.name) with
+        | None ->
+            if x = source then
+              u := None
+            else
+              fatal rc_Error
+                (Printf.sprintf
+                   "Failed to find \"%s\"'s previous room in shortest_path"
+                   x.name )
+        | Some r ->
+            u := Some r )
+  done ;
+  match !shortest with
+  | None ->
+      fatal rc_Error "shortest_path failed to find a path"
+  | Some x ->
+      x
+
+let find_rooms_by_distance (m : map) (root : room) (distance : int) : room list
+    =
+  fst
+    (List.split
+       (List.filter
+          (fun (r, dist) -> dist = distance)
+          (List.map
+             (fun (r, sp) ->
+               ( r
+               , List.length sp
+                 - 1 (* Subtract 1 because path includes source room *) ) )
+             (List.map (fun r -> (r, shortest_path m root r)) m.rooms) ) ) )
+
+(* let results = ref [] in
+  reset_search Int.max_int ;
+  (* Fill in room distances *)
+  let queue = ref [root] in
+  set_room_distance root 0 ;
+  discover_room root ;
+  while List.length !queue > 0 do
+    let r =
+      match !queue with
+      | [] ->
+          fatal rc_Error "Unreachable"
+      | h :: t ->
+          queue := t ;
+          h
+    in
+    for
+      i = 0
+      to List.length r.connections
+         +
+         if r.ladder_connection = None then
+           0
+         else
+           1
+    do
+      match
+        find_room m
+          (List.nth
+             ( r.connections
+             @ match r.ladder_connection with None -> [] | Some x -> [x] )
+             i )
+      with
+      | None ->
+          fatal rc_Error "Unreachable"
+      | Some r' ->
+          if !active_search_params.discovered r'.name then (
+            set_room_distance r' (!active_search_params.distance r.name + 1) ;
+            discover_room r' ;
+            queue := r' :: !queue
+          )
+    done
+  done ;
+  List.iter
+    (fun r ->
+      if !active_search_params.distance r.name = distance then
+        results := !results @ [r] )
+    m.rooms ;
+  reset_search (-1) ;
+  !results *)

@@ -35,6 +35,10 @@ and rc_Error = (1, "ERROR")
 
 and rc_ArgError = (2, "ARGUMENT ERROR")
 
+and rc_Unreachable = (3, "UNREACHABLE")
+
+and rc_Unimplemented = (4, "UNIMPLEMENTED")
+
 (** ANSI encoding for bold text *)
 let ansi_bold = "\x1b[1m"
 
@@ -81,6 +85,10 @@ let fatal rc message =
     (snd rc) ansi_reset message ;
   flush stderr ;
   exit (fst rc)
+
+let unreachable ?(message : string = "") () = fatal rc_Unreachable message
+
+let unimplemented ?(message : string = "") () = fatal rc_Unimplemented message
 
 (** Prints log statements to stdout/stderr *)
 let _log log_level message =

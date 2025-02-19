@@ -10,22 +10,28 @@ type 'a selection =
       (** User gave an invalid selection, optional error string *)
   | Selected of 'a  (** User selected something *)
 
+let reset_terminal () =
+  tcsetattr stdin TCSANOW {(tcgetattr stdin) with c_echo= true; c_icanon= true} ;
+  flush Stdlib.stdout ;
+  flush Stdlib.stderr
+
 let read_n_chars n =
   flush Stdlib.stdout ;
+  (* Disable echo & canonical mode *)
   let term_io = tcgetattr stdin in
   let new_term_io = {term_io with c_echo= false; c_icanon= false} in
   tcsetattr stdin TCSANOW new_term_io ;
-  (* Disable echo & canonical mode *)
   let buffer = Bytes.create n in
   really_input Stdlib.stdin buffer 0 n ;
-  tcsetattr stdin TCSANOW term_io ;
   (* Restore original settings *)
+  reset_terminal () ;
   buffer
 
 (** Given a prompt and a list of options, prompt the user to select an option by 
     index or matching string via stdin *)
-let rec get_int_selection ?(keys : char list = []) (prompt : string)
-    (options : string list) (allow_back : bool) : int option =
+let rec get_int_selection ?(keys : char list = [])
+    ?(back_string : string = "Back") (prompt : string) (options : string list)
+    (allow_back : bool) : int option =
   if List.exists (fun c -> c = 'b') keys then
     _log Log_Warning "get_int_selection ?keys should not contain 'b'" ;
   if keys != [] && List.length keys != List.length options then
@@ -37,7 +43,7 @@ let rec get_int_selection ?(keys : char list = []) (prompt : string)
     print_endline prompt ;
     let options =
       if allow_back then
-        options @ ["Back"]
+        options @ [back_string]
       else
         options
     in
@@ -97,13 +103,16 @@ let rec get_int_selection ?(keys : char list = []) (prompt : string)
           Some (x - 1)
         else (
           print_endline ("Invalid selection \"" ^ !choice ^ "\"") ;
-          get_int_selection prompt options allow_back
+          get_int_selection prompt ~keys ~back_string
+            (List.filter (fun s -> s != back_string) options)
+            allow_back
         )
     | None -> (
         if
           (* Check for back selection *)
           ( String.lowercase_ascii !choice = "b"
-          || String.lowercase_ascii !choice = "back" )
+          || String.lowercase_ascii !choice = String.lowercase_ascii back_string
+          )
           && allow_back
         then
           None
@@ -119,12 +128,16 @@ let rec get_int_selection ?(keys : char list = []) (prompt : string)
             match List.find_opt (fun s -> !choice = String.make 1 s) keys with
             | None ->
                 print_endline ("Invalid selection \"" ^ !choice ^ "\"") ;
-                get_int_selection ~keys prompt options allow_back
+                get_int_selection ~keys ~back_string prompt
+                  (List.filter (fun s -> s != back_string) options)
+                  allow_back
             | Some x ->
                 List.find_index (fun s -> s = x) keys )
           | None ->
               print_endline ("Invalid selection \"" ^ !choice ^ "\"") ;
-              get_int_selection prompt options allow_back
+              get_int_selection ~keys ~back_string prompt
+                (List.filter (fun s -> s != back_string) options)
+                allow_back
           | Some o ->
               List.find_index (fun s -> s = o) options )
   )

@@ -11,33 +11,33 @@ open Logging
 (** Running game state *)
 type state =
   { map: map  (** Game map *)
-  ; num_scrap: room -> int  (** How much scrap is in this room *)
-  ; has_event: room -> bool  (** Whether the room has an event *)
-  ; room_items: room -> item list  (** Items in the room *)
-  ; characters: character list  (** Characters in play *)
-  ; active_character: character option  (** Currently-playing character *)
+  ; num_scrap: room -> int  (** How much scrap is in this [room] *)
+  ; has_event: room -> bool  (** Whether the [room] has an event *)
+  ; room_items: room -> item list  (** Items in the [room] *)
+  ; characters: character list  (** [characters]s in play *)
+  ; active_character: character option  (** Currently-playing [character] *)
   ; character_rooms: character -> int
-        (** Location of characters in play, index into [map.rooms] *)
-  ; xeno_room: int  (** Location of xenomorph *)
-  ; ash_room: int option  (** Location of Ash, if in play *)
+        (** Location of [character]s in play - index into [map.rooms] *)
+  ; xeno_room: int  (** Location of xenomorph - index into [map.rooms] *)
+  ; ash_room: int option
+        (** Location of Ash, if in play - index into [map.rooms] *)
   ; ash_health: int
         (** Ash's health for final mission "You Have My Sympathies" *)
   ; ash_killed: bool (*** Whether Ash has been killed *)
   ; jonesy_caught: bool  (** Whether Jonesy has been caught *)
   ; round_count: int  (** How many rounds have passed *)
-  ; turn_idx: int
-        (** Index into character list that designates which character's turn it is *)
+  ; turn_idx: int  (** How many turns have passed on this round *)
   ; self_destruct_count: int option  (** How many turns until self destruct *)
-  ; character_scraps: character -> int  (** Scrap per character *)
-  ; character_items: character -> item list  (** Items per character *)
-  ; encounters: encounter list  (** Un-drawn encounters *)
-  ; discarded_encounters: encounter list  (** Discarded encounters *)
-  ; morale: int  (** Team morale - game ends when it reaches 0 *)
+  ; character_scraps: character -> int  (** Scrap per [character] *)
+  ; character_items: character -> item list  (** Items per [character] *)
+  ; encounters: encounter list  (** Un-drawn [encounter]s *)
+  ; discarded_encounters: encounter list  (** Discarded [encounter]s *)
+  ; morale: int  (** Team morale *)
   ; objectives: objective list
-        (** Objectives to complete before the final mission is revealed *)
+        (** [objective]s to complete before the final mission is revealed *)
   ; on_final_mission: bool  (** Whether final mission is active *)
   ; final_mission: final_mission option
-        (** What the game's final objective is *) }
+        (** What the game's final [objective] is *) }
 
 (** Reference to the global game state *)
 let game_state : state ref =
@@ -87,13 +87,15 @@ let game_state : state ref =
         ; Order937_CollatingData ]
     ; discarded_encounters= [] }
 
-(** Get room a [character] is in *)
+(* Character state *)
+
+(** Get [room] a [character] is in *)
 let locate_character (c : character) : room =
   List.nth !game_state.map.rooms (!game_state.character_rooms c)
 
-(** Add a [character] to a room *)
+(** Add a [character] to a [room] *)
 let add_character (c : character) (r : room) : unit =
-  match List.find_index (fun x -> x = r) !game_state.map.rooms with
+  match List.find_index (fun x -> x.name = r.name) !game_state.map.rooms with
   | None ->
       fatal rc_Error ("Failed to add character to non-existent room " ^ r.name)
   | Some idx ->
@@ -106,51 +108,13 @@ let add_character (c : character) (r : room) : unit =
 
 (** Set the position of a [character] *)
 let set_character_room (c : character) (r : room) : unit =
-  match List.find_index (fun x -> x = r) !game_state.map.rooms with
+  match List.find_index (fun x -> x.name = r.name) !game_state.map.rooms with
   | None ->
       ()
   | Some idx ->
       game_state :=
         { !game_state with
           character_rooms= ch_update !game_state.character_rooms c idx }
-
-(** Set the number of scrap in a [room] *)
-let set_room_scrap (r : room) (n : int) : unit =
-  game_state := {!game_state with num_scrap= update !game_state.num_scrap r n}
-
-(** Set whether a room has an [event] *)
-let set_room_has_event (r : room) (b : bool) : unit =
-  game_state := {!game_state with has_event= update !game_state.has_event r b}
-
-(** Check whether a room contains coolant *)
-let has_coolant (r : room) : bool =
-  List.exists (fun x -> x = CoolantCanister) (!game_state.room_items r)
-
-let add_room_item (r : room) (i : item) : unit =
-  game_state :=
-    { !game_state with
-      room_items= update !game_state.room_items r (i :: !game_state.room_items r)
-    }
-
-let remove_room_item (r : room) (i : item) : unit =
-  match List.find_index (fun x -> x = i) (!game_state.room_items r) with
-  | None ->
-      _log Log_Error
-        (Printf.sprintf "Failed to remove item %s from room %s"
-           (string_of_item i) r.name )
-  | Some item_idx ->
-      let items' =
-        List.filteri (fun x _ -> x != item_idx) (!game_state.room_items r)
-      in
-      game_state :=
-        {!game_state with room_items= update !game_state.room_items r items'}
-
-let pop_room_item (r : room) (idx : int) : item option =
-  match List.nth_opt (!game_state.room_items r) idx with
-  | None ->
-      None
-  | Some x ->
-      remove_room_item r x ; Some x
 
 (** Determine the number of scrap a [character] has *)
 let get_character_scrap : character -> int = !game_state.character_scraps
@@ -161,8 +125,10 @@ let set_character_scrap (c : character) (s : int) : unit =
     { !game_state with
       character_scraps= ch_update !game_state.character_scraps c s }
 
+(** Get the items in a [character]'s inventory *)
 let get_character_items : character -> item list = !game_state.character_items
 
+(** Add an item to a [character]'s inventory *)
 let add_character_item (c : character) (i : item) : unit =
   game_state :=
     { !game_state with
@@ -170,6 +136,7 @@ let add_character_item (c : character) (i : item) : unit =
         ch_update !game_state.character_items c
           (i :: !game_state.character_items c) }
 
+(** Remove an [item] from a [character]'s inventory *)
 let remove_character_item (c : character) (i : item) : unit =
   match List.find_index (fun x -> x = i) (!game_state.character_items c) with
   | None ->
@@ -184,13 +151,70 @@ let remove_character_item (c : character) (i : item) : unit =
         { !game_state with
           character_items= ch_update !game_state.character_items c items' }
 
-(** Remove an item from a character and return it *)
+(** Remove an [item] from a [character] and return it *)
 let pop_character_item (c : character) (idx : int) : item option =
   match List.nth_opt (!game_state.character_items c) idx with
   | None ->
       None
   | Some x ->
       remove_character_item c x ; Some x
+
+(** Whether a [character] has a specific [item] in their inventory *)
+let character_has_item (i : item) (c : character) : bool =
+  List.exists (fun x -> x = i) (!game_state.character_items c)
+
+(** List of characters and their locations *)
+let character_locations () : (character * room) list =
+  List.map (fun c -> (c, locate_character c)) !game_state.characters
+
+(* Room state *)
+
+(** Set the number of scrap in a [room] *)
+let set_room_scrap (r : room) (n : int) : unit =
+  game_state := {!game_state with num_scrap= update !game_state.num_scrap r n}
+
+(** Set whether a room has an [event] *)
+let set_room_has_event (r : room) (b : bool) : unit =
+  game_state := {!game_state with has_event= update !game_state.has_event r b}
+
+(** Check whether a [room] contains coolant *)
+let has_coolant (r : room) : bool =
+  List.exists (fun x -> x = CoolantCanister) (!game_state.room_items r)
+
+(** Add an [item] to a [room] *)
+let add_room_item (r : room) (i : item) : unit =
+  game_state :=
+    { !game_state with
+      room_items= update !game_state.room_items r (i :: !game_state.room_items r)
+    }
+
+(** Remove an [item] from a [room] *)
+let remove_room_item (r : room) (i : item) : unit =
+  match List.find_index (fun x -> x = i) (!game_state.room_items r) with
+  | None ->
+      _log Log_Error
+        (Printf.sprintf "Failed to remove item %s from room %s"
+           (string_of_item i) r.name )
+  | Some item_idx ->
+      let items' =
+        List.filteri (fun x _ -> x != item_idx) (!game_state.room_items r)
+      in
+      game_state :=
+        {!game_state with room_items= update !game_state.room_items r items'}
+
+(** Remove an [item] from a [room] and return it, if one exists *)
+let pop_room_item (r : room) (idx : int) : item option =
+  match List.nth_opt (!game_state.room_items r) idx with
+  | None ->
+      None
+  | Some x ->
+      remove_room_item r x ; Some x
+
+(** Set the game's [map] *)
+let set_map (map_fn : string) : unit =
+  game_state := {!game_state with map= parse_map_file map_fn}
+
+(* Encounter state *)
 
 (** Shuffle the list of random [encounter]s *)
 let shuffle_encounters () : unit =
@@ -219,5 +243,43 @@ let replace_encounter () : unit =
           encounters= h :: !game_state.encounters
         ; discarded_encounters= t }
 
-let set_map (map_fn : string) : unit =
-  game_state := {!game_state with map= parse_map_file map_fn}
+let replace_alien_encounters () : unit =
+  game_state :=
+    { !game_state with
+      encounters=
+        List.filter encounter_is_alien !game_state.discarded_encounters
+        @ !game_state.encounters
+    ; discarded_encounters=
+        List.filter
+          (fun x -> not (encounter_is_alien x))
+          !game_state.discarded_encounters } ;
+  shuffle_encounters ()
+
+let replace_order937_encounters () : unit =
+  game_state :=
+    { !game_state with
+      encounters=
+        List.filter encounter_is_order937 !game_state.discarded_encounters
+        @ !game_state.encounters
+    ; discarded_encounters=
+        List.filter
+          (fun x -> not (encounter_is_order937 x))
+          !game_state.discarded_encounters } ;
+  shuffle_encounters ()
+
+(* Misc state *)
+
+let get_xeno_room () : room =
+  List.nth !game_state.map.rooms !game_state.xeno_room
+
+let set_xeno_room (r : room) : unit =
+  game_state :=
+    { !game_state with
+      xeno_room=
+        ( match
+            List.find_index (fun x -> x.name = r.name) !game_state.map.rooms
+          with
+        | None ->
+            fatal rc_Error "set_xeno_error couldn't find index of room"
+        | Some r ->
+            r ) }

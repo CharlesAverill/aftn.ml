@@ -5,6 +5,7 @@ type item =
   | ElectricProd
   | MotionTracker
   | CoolantCanister
+  | CatCarrier
 
 let string_of_item = function
   | Incinerator ->
@@ -19,15 +20,26 @@ let string_of_item = function
       "MOTION TRACKER"
   | CoolantCanister ->
       "COOLANT CANISTER"
+  | CatCarrier ->
+      "CAT CARRIER"
 
 (** Which indefinite article to use when referring to the item *)
-let article_of_item = function
-  | Incinerator | ElectricProd ->
-      "an"
-  | Flashlight | GrappleGun | MotionTracker | CoolantCanister ->
-      "a"
+let article_of_item i =
+  if
+    List.fold_left
+      (fun a prefix ->
+        a
+        || String.starts_with ~prefix
+             (String.lowercase_ascii (string_of_item i)) )
+      false ["a"; "e"; "i"; "o"; "u"]
+  then
+    "an"
+  else
+    "a"
 
 let cost_of_item = function
+  | CatCarrier ->
+      1
   | Flashlight ->
       2
   | MotionTracker | GrappleGun | ElectricProd ->

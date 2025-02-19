@@ -13,6 +13,24 @@ open Random
 open Objective
 open Logging
 open Item
+open Events
+open Encounter
+open Utils
+
+let win_game () =
+  print_endline "!!!!![GAME COMPLETE] - Congratulations!" ;
+  print_endline "Your score will be recorded" ;
+  reset_terminal () ;
+  (* TODO : implement *)
+  exit 0
+
+let lose_game ?(game_over : bool = true) (message : string) =
+  reset_terminal () ;
+  if game_over then
+    Printf.printf "!!!!![GAME OVER] - %s!!!!!\n" message
+  else
+    () ;
+  exit 0
 
 (** Set up the game state given user preferences *)
 let setup_game (n_players : int) (n_characters : int) (use_ash : bool) : unit =
@@ -84,7 +102,7 @@ let setup_game (n_players : int) (n_characters : int) (use_ash : bool) : unit =
           true
       with
       | None ->
-          exit 0
+          lose_game ~game_over:false ""
       | Some n ->
           add_character (List.nth !char_options n)
             !game_state.map.player_start_room ;
@@ -101,14 +119,13 @@ let setup_game (n_players : int) (n_characters : int) (use_ash : bool) : unit =
     game_state :=
       { !game_state with
         objectives=
-          List.map
-            (fill_in_obj_room !game_state.map)
-            (get_objectives (n_characters + 1))
-          (* Get random objectives *) } ;
+          get_objectives (n_characters + 1) (* Get random objectives *) } ;
     shuffle_encounters ()
 
 (** TODO : implement *)
 let update_objectives () = ()
+
+let update_final_mission () = ()
 
 (** Possible turn actions *)
 type action =
@@ -174,7 +191,6 @@ let actions =
   ; TradeItem
   ; EndTurn
   ; ViewRoom
-  ; ViewCharacterLocations
   ; SeeObjectives
   ; DrawMap
   ; Exit ]
@@ -190,20 +206,19 @@ let single_player_actions =
   ; UseItem
   ; EndTurn
   ; ViewRoom
-  ; ViewCharacterLocations
   ; SeeObjectives
   ; DrawMap
   ; Exit ]
 
 let action_select_chars =
-  ['m'; 'p'; 'd'; 'a'; 'i'; 'k'; 'c'; 'u'; 't'; 'e'; 'v'; 'l'; 'o'; 'M'; 'x']
+  ['m'; 'p'; 'd'; 'a'; 'i'; 'k'; 'c'; 'u'; 't'; 'e'; 'v'; 'o'; 'M'; 'x']
 
 let single_player_action_select_chars =
-  ['m'; 'p'; 'd'; 'a'; 'i'; 'k'; 'c'; 'u'; 'e'; 'v'; 'l'; 'o'; 'M'; 'x']
+  ['m'; 'p'; 'd'; 'a'; 'i'; 'k'; 'c'; 'u'; 'e'; 'v'; 'o'; 'M'; 'x']
 
-(** Prompt player for room to move to, return [false] if action canceled *)
+(** Prompt player for room to move to, return [None] if action canceled *)
 let character_move (active_character : character) (allowed_moves : room list)
-    (allow_back : bool) : bool =
+    (allow_back : bool) : room option =
   let ladder =
     if allowed_moves = [] then
       (locate_character active_character).ladder_connection
@@ -233,18 +248,18 @@ let character_move (active_character : character) (allowed_moves : room list)
       allow_back
   with
   | None ->
-      false
+      None
   | Some i -> (
     match find_room !game_state.map (List.nth allowed_moves i) with
     | None ->
         _log Log_Error
           "find_room in character_move returned None when it shouldn't have" ;
-        false
+        None
     | Some r ->
         Printf.printf "%s moved from %s to %s\n" active_character.last_name
           (locate_character active_character).name r.name ;
         set_character_room active_character r ;
-        true )
+        Some r )
 
 (** Prompt player for item/scrap to pick up. If an [item] is selected, [true]
     is returned to indicate the turn is over, otherwise [false].
@@ -367,13 +382,14 @@ let drop (active_character : character) : bool =
           ) )
 
 (** Show the active character's inventory *)
-let view_inventory ?(print_name : bool = false) (active_character : character) :
-    unit =
-  Printf.printf "=====%sINVENTORY=====\n"
+let view_inventory ?(print_name : bool = false) ?(print_location : bool = true)
+    (active_character : character) : unit =
+  Printf.printf "=====%sSTATUS=====\n"
     ( if print_name then
         active_character.last_name ^ " "
       else
         "" ) ;
+  Printf.printf "Location: %s\n" (locate_character active_character).name ;
   Printf.printf "Scrap: %d\n" (!game_state.character_scraps active_character) ;
   print_endline "Items:" ;
   List.iter
@@ -382,9 +398,11 @@ let view_inventory ?(print_name : bool = false) (active_character : character) :
 
 (** Show the team's morale and inventories *)
 let view_team () : unit =
-  print_endline "=====TEAM=====" ;
+  print_endline "=======TEAM=======" ;
   Printf.printf "Morale: %d\n" !game_state.morale ;
-  List.iter (view_inventory ~print_name:true) !game_state.characters
+  List.iter
+    (view_inventory ~print_name:true ~print_location:true)
+    !game_state.characters
 
 (** Prompt the user to craft an item with scrap and add it to the active character's inventory *)
 let craft (active_character : character) : bool =
@@ -623,6 +641,8 @@ let trade_item (active_character : character) : bool =
         | _ ->
             false )
 
+let use_item (c : character) (i : item) : unit = ()
+
 (** Print out room information *)
 let view_room (active_character : character) : unit =
   let current_room = locate_character active_character in
@@ -654,6 +674,238 @@ let view_room (active_character : character) : unit =
   | Some s ->
       Printf.printf "Ladder connection: %s\n" s
 
+(** Reduce morale and check for morale-loss-reduction items and game over *)
+let reduce_morale (n : int) (saw_xeno : bool) : unit =
+  let flashlight_chars =
+    List.filter (character_has_item Flashlight) !game_state.characters
+  in
+  let prod_chars =
+    List.filter (character_has_item ElectricProd) !game_state.characters
+  in
+  let discount =
+    if (not (List.is_empty flashlight_chars)) && not (List.is_empty prod_chars)
+    then (
+      let options =
+        List.map (fun c -> (c, Flashlight, 1)) flashlight_chars
+        @ List.map (fun c -> (c, ElectricProd, 2)) prod_chars
+      in
+      match
+        get_int_selection ~back_string:"No"
+          "These characters have a FLASHLIGHT or an ELECTRIC PROD, would you \
+           like to use one to reduce morale lost by 1 or 2, respectively?"
+          (List.map
+             (fun (c, i, m) ->
+               Printf.sprintf "%s has %s %s - reduce lost morale by %d"
+                 c.last_name (article_of_item i) (string_of_item i) m )
+             options )
+          true
+      with
+      | None ->
+          0
+      | Some idx ->
+          let use_character, i, discount = List.nth options idx in
+          use_item use_character i ; discount
+    ) else
+      0
+  in
+  game_state := {!game_state with morale= !game_state.morale - (n - discount)} ;
+  if !game_state.morale <= 0 then lose_game "Morale dropped to 0"
+
+(** Force a character to move 3 spaces away *)
+let flee (active_character : character) : unit =
+  Printf.printf "!!!!!%s must flee 3 spaces!!!!!\n" active_character.last_name ;
+  let allowed_moves =
+    find_rooms_by_distance !game_state.map (locate_character active_character) 3
+  in
+  ( match character_move active_character allowed_moves false with
+  | None ->
+      fatal rc_Error "Failed to select move while fleeing"
+  | Some x ->
+      set_character_room active_character x ) ;
+  update_objectives ()
+
+(** Move the xenomorph closer to the closest team member *)
+let xeno_move (num_spaces : int) (morale_drop : int) : bool =
+  let shortest_path_to_nearest_char =
+    match
+      List.map
+        (shortest_path !game_state.map
+           (List.nth !game_state.map.rooms !game_state.xeno_room) )
+        (List.map locate_character !game_state.characters)
+    with
+    | [] ->
+        fatal rc_Error "list of shortest paths to each character is empty"
+    | h :: t ->
+        List.fold_left
+          (fun a l ->
+            if List.length l < List.length a then
+              l
+            else
+              a )
+          h t
+  in
+  set_xeno_room
+    (List.nth shortest_path_to_nearest_char
+       (min num_spaces (List.length shortest_path_to_nearest_char - 1)) ) ;
+  let saw_xeno = ref false in
+  List.iter
+    (fun c ->
+      if locate_character c = get_xeno_room () then (
+        if not !saw_xeno then (
+          saw_xeno := true ;
+          Printf.printf "!!!!!The Xenomorph meets you in %s!!!!!\n"
+            (get_xeno_room ()).name
+        ) ;
+        reduce_morale morale_drop true ;
+        flee c
+      ) )
+    !game_state.characters ;
+  !saw_xeno
+
+let ash_move n : unit = ()
+
+(** Draw an encounter card and execute it *)
+let trigger_encounter (active_character : character) : unit =
+  let ash_in_play =
+    !game_state.ash_room != None && not !game_state.ash_killed
+  in
+  match discard_encounter () with
+  | None ->
+      fatal rc_Error "No encounters to draw"
+  | Some encounter -> (
+      ( match !game_state.final_mission with
+      | Some fm -> (
+        match fm.kind with
+        | AlienCrewLocationsEncounter
+            (target_xeno_room, target_character_rooms, encounter_check) -> (
+          match find_room !game_state.map target_xeno_room with
+          | None ->
+              fatal rc_Error
+                ("Final mission has invalid xeno room " ^ target_xeno_room)
+          | Some target_xeno_room ->
+              let acceptable_xeno_rooms =
+                target_xeno_room.name :: target_xeno_room.connections
+              in
+              let xeno_in_right_place =
+                List.exists
+                  (fun s -> s = (get_xeno_room ()).name)
+                  acceptable_xeno_rooms
+              in
+              let characters_in_right_places =
+                List.for_all
+                  (fun s ->
+                    List.exists
+                      (fun (_, r) -> r.name = s)
+                      (character_locations ()) )
+                  target_character_rooms
+              in
+              if xeno_in_right_place && characters_in_right_places then
+                win_game () )
+        | _ ->
+            () )
+      | _ ->
+          () ) ;
+      match encounter with
+      | Quiet ->
+          let target_room = select_random !game_state.map.rooms in
+          Printf.printf "[ENCOUNTER] - All is quiet in %s. The xenomorph lurks."
+            target_room.name ;
+          if ash_in_play then
+            print_endline " Ash lurks."
+          else
+            print_endline "" ;
+          (* Place scrap into target_room *)
+          ( match Random.int_in_range ~min:1 ~max:11 with
+          | x when x <= 8 ->
+              set_room_scrap target_room (2 + !game_state.num_scrap target_room)
+          | x when x <= 10 ->
+              set_room_scrap target_room (3 + !game_state.num_scrap target_room)
+          | _ ->
+              set_room_scrap target_room (1 + !game_state.num_scrap target_room)
+          ) ;
+          (* Place events *)
+          if
+            match !game_state.final_mission with
+            | Some fm -> (
+              match fm.kind with SelfDestructClear _ -> false | _ -> true )
+            | _ ->
+                true
+          then
+            set_room_has_event target_room true ;
+          let _ = xeno_move 1 2 in
+          ash_move 1
+      | Alien_LostTheSignal ->
+          Printf.printf "[ENCOUNTER] - The xenomorph has returned to the %s."
+            !game_state.map.xeno_start_room.name ;
+          if ash_in_play then
+            print_endline " Ash lurks."
+          else
+            print_endline "" ;
+          set_xeno_room !game_state.map.xeno_start_room ;
+          let _ = xeno_move 0 2 in
+          ash_move 1 ;
+          replace_alien_encounters ()
+      | Alien_Stalk ->
+          print_string "[ENCOUNTER] - The xenomorph is stalking..." ;
+          if ash_in_play then
+            print_endline " Ash lurks."
+          else
+            print_endline "" ;
+          let _ = xeno_move 3 3 in
+          ash_move 1
+      | Alien_Hunt ->
+          print_string "[ENCOUNTER] - The xenomorph is hunting!" ;
+          if ash_in_play then
+            print_endline " Ash lurks."
+          else
+            print_endline "" ;
+          let _ = xeno_move 2 4 in
+          ash_move 1
+      | Order937_MeetMeInTheInfirmary ->
+          Printf.printf "[ENCOUNTER] - %s travels to %s."
+            active_character.last_name !game_state.map.ash_start_room.name ;
+          if ash_in_play then
+            print_endline " Ash gives chase!"
+          else
+            print_endline "" ;
+          set_character_room active_character !game_state.map.ash_start_room ;
+          update_objectives () ;
+          ash_move 2
+      | Order937_CrewExpendable ->
+          Printf.printf "[ENCOUNTER] - %s loses all scrap!"
+            active_character.last_name ;
+          if ash_in_play then
+            print_endline " Ash gives chase!"
+          else
+            print_endline "" ;
+          replace_order937_encounters () ;
+          set_character_scrap active_character 0 ;
+          ash_move 2
+      | Order937_CollatingData ->
+          Printf.printf "[ENCOUNTER] - %s %s 1 scrap%s"
+            (String.concat ", "
+               (List.map (fun c -> c.last_name) !game_state.characters) )
+            ( if List.length !game_state.characters > 1 then
+                "lose"
+              else
+                "loses" )
+            ( if List.length !game_state.characters > 1 then
+                " each."
+              else
+                "." ) ;
+          if ash_in_play then
+            print_endline " Ash gives chase!"
+          else
+            print_endline "" ;
+          List.iter
+            (fun c -> set_character_scrap c (max 0 (get_character_scrap c - 1)))
+            !game_state.characters ;
+          ash_move 2 )
+
+(* TODO : When using motion tracker, if xeno spotted then 
+  set xeno to motion tracker target room, then
+        xeno_move 0 2*)
+
 (** Main game loop *)
 let game_loop () : unit =
   print_endline
@@ -683,18 +935,13 @@ let game_loop () : unit =
         match !game_state.self_destruct_count with
         | Some x when i = 0 ->
             game_state := {!game_state with self_destruct_count= Some (x - 1)} ;
-            if x - 1 <= 0 then (
-              print_endline
-                "[SELF-DESTRUCT] The Self-Destruct timer drops to 0!" ;
-              print_endline
-                "[GAME OVER] - The Nostromo self-destructed with the Crew \
-                 still on it!" ;
-              exit 0
-            ) else
-              Printf.printf
-                "[SELF-DESTRUCT] The Self-Destruct timer drops to %d!\n" (x - 1)
+            Printf.printf
+              "[SELF-DESTRUCT] The Self-Destruct timer drops to %d!\n" (x - 1) ;
+            if x - 1 <= 0 then
+              lose_game "The Nostromo self-destructed with the Crew still on it"
         | _ ->
             let end_turn = ref false in
+            let do_encounter = ref true in
             for action_count = active_character.max_actions downto 1 do
               let action_successful = ref true in
               let first_try = ref true in
@@ -726,25 +973,37 @@ let game_loop () : unit =
                           single_player_actions )
                       x
                   with
-                  | Move ->
-                      if not (character_move active_character [] true) then (
+                  | Move -> (
+                    match character_move active_character [] true with
+                    | None ->
                         print_endline "Canceled move" ;
                         action_successful := false
-                      ) else
-                        action_successful := true
-                  | PickUp -> (
-                    match pickup active_character with
-                    | false ->
-                        print_endline "Canceled pick up" ;
-                        action_successful := false
-                    | true ->
-                        () )
+                    | Some _ ->
+                        action_successful := true ;
+                        (* Trigger events in new location *)
+                        ( match trigger_event active_character None with
+                        | XenoEvent ->
+                            flee active_character ;
+                            end_turn := true ;
+                            do_encounter := false
+                        | _ ->
+                            () ) ;
+                        (* Check if player moved into xeno room and trigger fleeing *)
+                        if xeno_move 0 2 then (
+                          end_turn := true ;
+                          do_encounter := false
+                        ) ;
+                        ash_move 0 ;
+                        update_objectives () ;
+                        update_final_mission () )
+                  | PickUp ->
+                      action_successful := pickup active_character ;
+                      if not !action_successful then
+                        print_endline "Canceled pick up"
                   | Drop ->
                       action_successful := drop active_character
                   | Ability ->
-                      fatal rc_Error
-                        ( "Action " ^ string_of_action Ability
-                        ^ " is unsupported" )
+                      unimplemented ()
                   | ViewInventory ->
                       view_inventory active_character ;
                       action_successful := false
@@ -754,14 +1013,11 @@ let game_loop () : unit =
                   | Craft ->
                       action_successful := craft active_character
                   | UseItem ->
-                      fatal rc_Error
-                        ( "Action " ^ string_of_action UseItem
-                        ^ " is unsupported" )
+                      unimplemented ()
                   | TradeItem ->
-                      if not (trade_item active_character) then (
-                        print_endline "Trade canceled" ;
-                        action_successful := false
-                      )
+                      action_successful := trade_item active_character ;
+                      if not !action_successful then
+                        print_endline "Trade canceled"
                   | EndTurn ->
                       if
                         confirm
@@ -778,15 +1034,9 @@ let game_loop () : unit =
                       view_room active_character ;
                       action_successful := false
                   | ViewCharacterLocations ->
-                      fatal rc_Error
-                        ( "Action "
-                        ^ string_of_action ViewCharacterLocations
-                        ^ " is unsupported" )
+                      unimplemented ()
                   | SeeObjectives ->
-                      fatal rc_Error
-                        ( "Action "
-                        ^ string_of_action SeeObjectives
-                        ^ " is unsupported" )
+                      unimplemented ()
                   | DrawMap ->
                       ( match !game_state.map.ascii_map with
                       | None ->
@@ -799,13 +1049,15 @@ let game_loop () : unit =
                         confirm
                           (Some "Are you sure you want to exit the game? (y/n) ")
                       then
-                        exit 0
+                        lose_game ~game_over:false ""
                       else
                         action_successful := false )
                 | None ->
-                    ()
+                    unreachable ()
               done
-            done )
+            done ;
+            if !do_encounter then trigger_encounter active_character )
       !game_state.characters ;
+    _log Log_Debug ("Xenomorph location: " ^ (get_xeno_room ()).name) ;
     game_state := {!game_state with round_count= !game_state.round_count + 1}
   done
