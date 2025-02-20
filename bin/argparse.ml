@@ -15,7 +15,7 @@ let parse_arguments (game_data_path : string) : arguments =
   let use_ash = ref false in
   let map_path = ref (concat (concat game_data_path "maps") "default") in
   let print_map = ref false in
-  let log_level = ref Log_Debug in
+  let log_level = ref Log_Warning in
   let speclist =
     [ ("--players", Arg.Set_int n_players, "Number of players (UNSUPPORTED)")
     ; ( "--characters"
