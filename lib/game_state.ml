@@ -28,6 +28,8 @@ type state =
   ; round_count: int  (** How many rounds have passed *)
   ; turn_idx: int  (** How many turns have passed on this round *)
   ; self_destruct_count: int option  (** How many turns until self destruct *)
+  ; self_destruct_character: character option
+        (** On which character's turn does self-destruct counter decrease? *)
   ; character_scraps: character -> int  (** Scrap per [character] *)
   ; character_items: character -> item list  (** Items per [character] *)
   ; encounters: encounter list  (** Un-drawn [encounter]s *)
@@ -58,6 +60,7 @@ let game_state : state ref =
     ; round_count= 1
     ; turn_idx= 0
     ; self_destruct_count= None
+    ; self_destruct_character= None
     ; morale= 0
     ; objectives= []
     ; cleared_objectives= []
@@ -103,7 +106,6 @@ let add_character (c : character) (r : room) : unit =
       game_state :=
         { !game_state with
           characters= !game_state.characters @ [c]
-        ; character_items= ch_update !game_state.character_items c [Flashlight]
         ; character_rooms= ch_update !game_state.character_rooms c idx
         ; character_scraps= ch_update !game_state.character_scraps c 0 }
 
@@ -243,6 +245,11 @@ let replace_encounter () : unit =
         { !game_state with
           encounters= h :: !game_state.encounters
         ; discarded_encounters= t }
+
+let replace_all_encounters () : unit =
+  while !game_state.discarded_encounters != [] do
+    replace_encounter ()
+  done
 
 let replace_alien_encounters () : unit =
   game_state :=

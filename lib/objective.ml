@@ -83,7 +83,7 @@ let string_of_final_mission (fm : final_mission) (n_characters : int)
     | HurtAsh (health, _, attack_xeno) ->
         Printf.sprintf
           "Deal %d damage to destroy Ash. Current health: %d. Ash is damaged \
-           and knocked back by using %s %s on him.Approaching Ash without %s \
+           and knocked back by using %s %s on him. Approaching Ash without %s \
            %s will cause morale to drop.%s"
           health ash_health
           (article_of_item CoolantCanister)

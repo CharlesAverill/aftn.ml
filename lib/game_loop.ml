@@ -128,81 +128,66 @@ let complete_objective o =
   Printf.printf "[OBJECTIVE] - Completed objective \"%s\"!\n" o.goal_name ;
   clear_objective o
 
-(** Check uncleared objectives and clear them if conditions are met *)
-let update_objectives () : unit =
-  List.iter
-    (fun o ->
-      match o.kind with
-      | BringItemToLocation (i, room) ->
-          let room = find_room !game_state.map room in
-          (* Clear if applicable *)
-          let _ =
-            List.fold_left
-              (fun cleared c ->
-                if
-                  (not cleared)
-                  && locate_character c = room
-                  && character_has_item i c
-                then (
-                  complete_objective o ; true
-                ) else
-                  cleared )
-              false !game_state.characters
-          in
-          ()
-      | CrewAtLocationWithMinimumScrap (room, n_scrap) ->
-          let room = find_room !game_state.map room in
-          if
-            List.fold_left
-              (fun a c ->
-                a
-                && !game_state.character_scraps c >= n_scrap
-                && locate_character c = room )
-              true !game_state.characters
-          then
-            complete_objective o
-      | DropCoolant (n_coolant, room) ->
-          let room = find_room !game_state.map room in
-          if
-            List.length
-              (List.filter
-                 (fun i -> i = CoolantCanister)
-                 (!game_state.room_items room) )
-            >= n_coolant
-          then
-            complete_objective o )
-    !game_state.objectives
-
-let see_objectives () : unit =
-  if List.length !game_state.objectives > 0 then (
-    print_endline "=====OBJECTIVES=====" ;
-    List.iter
-      (fun o -> print_endline (string_of_objective o))
-      !game_state.objectives
-  ) ;
-  if List.length !game_state.cleared_objectives > 0 then (
-    print_endline "=====CLEARED OBJECTIVES=====" ;
-    List.iter
-      (fun o -> print_endline (string_of_objective o))
-      !game_state.cleared_objectives
-  ) ;
-  if !game_state.final_mission != None then (
-    print_endline "=====FINAL MISSION=====" ;
-    match !game_state.final_mission with
-    | None ->
-        unreachable ()
-    | Some fm ->
-        print_endline
-          (string_of_final_mission fm
-             (List.length !game_state.characters)
-             ( match !game_state.self_destruct_count with
-             | None ->
-                 0
-             | Some x ->
-                 x )
-             !game_state.ash_health
-             (List.filter !game_state.has_event !game_state.map.rooms) )
-  )
+let setup_final_mission (active_character : character) : unit =
+  match !game_state.final_mission with
+  | None ->
+      unreachable ()
+  | Some final_mission ->
+      ( print_endline "=====FINAL MISSION - YOU HAVE A NEW OBJECTIVE=====" ;
+        match final_mission.kind with
+        | HurtAsh (health, _, _) ->
+            (* Fill equipment storage with coolant *)
+            for _ = 1 to List.length !game_state.characters + 2 do
+              add_room_item
+                (find_room !game_state.map "EQUIPMENT STORAGE")
+                CoolantCanister
+            done ;
+            print_endline "Coolant has been discovered in EQUIPMENT STORAGE!" ;
+            (* Spawn Ash *)
+            set_ash_room (find_room !game_state.map "MU-TH-UR") ;
+            game_state :=
+              {!game_state with ash_health= health; ash_killed= false} ;
+            print_endline "Ash has been located in MU-TH-UR!"
+        | DropItemsAndAssemble _ ->
+            (* Fill equipment storage with coolant *)
+            for _ = 1 to List.length !game_state.characters + 2 do
+              add_room_item
+                (find_room !game_state.map "EQUIPMENT STORAGE")
+                CoolantCanister
+            done ;
+            print_endline "Coolant has been discovered in EQUIPMENT STORAGE!"
+        | AlienCrewLocationsEncounter _ ->
+            replace_all_encounters () ; shuffle_encounters ()
+        | SelfDestructAssemble (counter, _, _, _) ->
+            (* Fill equipment storage with coolant *)
+            for _ = 1 to List.length !game_state.characters + 2 do
+              add_room_item
+                (find_room !game_state.map "EQUIPMENT STORAGE")
+                CoolantCanister
+            done ;
+            print_endline "Coolant has been discovered in EQUIPMENT STORAGE!" ;
+            Printf.printf "%s has the self-destruct counter!\n"
+              active_character.last_name ;
+            game_state :=
+              { !game_state with
+                self_destruct_count= Some counter
+              ; self_destruct_character= Some active_character }
+        | SelfDestructClear counter ->
+            List.iter
+              (fun r -> set_room_has_event r true)
+              (List.filter (fun r -> r.is_corridor) !game_state.map.rooms) ;
+            Printf.printf "%s has the self-destruct counter!\n"
+              active_character.last_name ;
+            game_state :=
+              { !game_state with
+                self_destruct_count= Some counter
+              ; self_destruct_character= Some active_character } ) ;
+      print_endline
+        (string_of_final_mission final_mission
+           (List.length !game_state.characters)
+           (match !game_state.self_destruct_count with None -> 0 | Some x -> x)
+           !game_state.ash_health
+           (List.filter !game_state.has_event !game_state.map.rooms) )
 
 (** Check if final mission criteria have been met, win game if so *)
 let update_final_mission () : unit =
@@ -261,6 +246,94 @@ let update_final_mission () : unit =
               !game_state.map.rooms )
     then
       win_game ()
+
+(** Check uncleared objectives and clear them if conditions are met *)
+let update_objectives (active_character : character) : unit =
+  List.iter
+    (fun o ->
+      match o.kind with
+      | BringItemToLocation (i, room) ->
+          let room = find_room !game_state.map room in
+          (* Clear if applicable *)
+          let _ =
+            List.fold_left
+              (fun cleared c ->
+                if
+                  (not cleared)
+                  && locate_character c = room
+                  && character_has_item i c
+                then (
+                  complete_objective o ; true
+                ) else
+                  cleared )
+              false !game_state.characters
+          in
+          ()
+      | CrewAtLocationWithMinimumScrap (room, n_scrap) ->
+          let room = find_room !game_state.map room in
+          if
+            List.fold_left
+              (fun a c ->
+                a
+                && !game_state.character_scraps c >= n_scrap
+                && locate_character c = room )
+              true !game_state.characters
+          then
+            complete_objective o
+      | DropCoolant (n_coolant, room) ->
+          let room = find_room !game_state.map room in
+          if
+            List.length
+              (List.filter
+                 (fun i -> i = CoolantCanister)
+                 (!game_state.room_items room) )
+            >= n_coolant
+          then
+            complete_objective o )
+    !game_state.objectives ;
+  if !game_state.final_mission = None then (
+    if !game_state.objectives = [] then (
+      print_endline "=====COMPLETED ALL OBJECTIVES=====" ;
+      let x = ref (select_random final_mission_stack) in
+      while List.length !game_state.characters < !x.min_chars do
+        x := select_random final_mission_stack
+      done ;
+      game_state := {!game_state with final_mission= Some !x} ;
+      setup_final_mission active_character
+    )
+  ) else
+    update_final_mission ()
+
+let see_objectives () : unit =
+  if List.length !game_state.objectives > 0 then (
+    print_endline "=====OBJECTIVES=====" ;
+    List.iter
+      (fun o -> print_endline (string_of_objective o))
+      !game_state.objectives
+  ) ;
+  if List.length !game_state.cleared_objectives > 0 then (
+    print_endline "=====CLEARED OBJECTIVES=====" ;
+    List.iter
+      (fun o -> print_endline (string_of_objective o))
+      !game_state.cleared_objectives
+  ) ;
+  if !game_state.final_mission != None then (
+    print_endline "=====FINAL MISSION=====" ;
+    match !game_state.final_mission with
+    | None ->
+        unreachable ()
+    | Some fm ->
+        print_endline
+          (string_of_final_mission fm
+             (List.length !game_state.characters)
+             ( match !game_state.self_destruct_count with
+             | None ->
+                 0
+             | Some x ->
+                 x )
+             !game_state.ash_health
+             (List.filter !game_state.has_event !game_state.map.rooms) )
+  )
 
 (** Reduce morale by [n] and check for morale-loss-reduction items and game over *)
 let reduce_morale (n : int) (saw_xeno : bool) : unit =
@@ -342,7 +415,7 @@ let character_move (active_character : character) (allowed_moves : room list)
       Printf.printf "%s moved from %s to %s\n" active_character.last_name
         (locate_character active_character).name r.name ;
       set_character_room active_character r ;
-      update_objectives () ;
+      update_objectives active_character ;
       Some r
 
 (** Force a character to move 3 spaces away *)
@@ -356,7 +429,7 @@ let flee (active_character : character) : unit =
       fatal rc_Error "Failed to select move while fleeing"
   | Some x ->
       set_character_room active_character x ) ;
-  update_objectives ()
+  update_objectives active_character
 
 (** Move the xenomorph closer to the closest team member *)
 let xeno_move (num_spaces : int) (morale_drop : int) : bool =
@@ -489,7 +562,7 @@ let rec ash_move (num_spaces : int) : unit =
               saw_ash := true ;
               Printf.printf "!!!!!Ash meets you in %s!!!!!\n" ash_room.name
             ) ;
-            if hurt_ash_active then
+            if not hurt_ash_active then
               if !game_state.character_scraps c > 0 then (
                 Printf.printf "%s lost %d scrap!\n" c.last_name 1 ;
                 set_character_scrap c (!game_state.character_scraps c - 1)
@@ -504,22 +577,23 @@ let rec ash_move (num_spaces : int) : unit =
               remove_character_item c CoolantCanister ;
               game_state :=
                 {!game_state with ash_health= !game_state.ash_health - 1} ;
-              (* Move Ash away *)
-              let ash_locations =
-                find_rooms_within_distance !game_state.map ash_room 3
-              in
-              match
-                get_int_selection "Where to send ash to?"
-                  (List.map (fun r -> r.name) ash_locations)
-                  false
-              with
-              | None ->
-                  unreachable ()
-              | Some idx ->
-                  let ash_room' = List.nth ash_locations idx in
-                  set_ash_room ash_room' ;
-                  Printf.printf "Ash retreats to %s!\n" ash_room'.name ;
-                  ash_move 0
+              if !game_state.ash_health > 0 then
+                (* Move Ash away *)
+                let ash_locations =
+                  find_rooms_within_distance !game_state.map ash_room 3
+                in
+                match
+                  get_int_selection "Where to send Ash to?"
+                    (List.map (fun r -> r.name) ash_locations)
+                    false
+                with
+                | None ->
+                    unreachable ()
+                | Some idx ->
+                    let ash_room' = List.nth ash_locations idx in
+                    set_ash_room ash_room' ;
+                    Printf.printf "Ash retreats to %s!\n" ash_room'.name ;
+                    ash_move 0
             ) else (
               reduce_morale 3 false ; flee c
             ) ;
@@ -626,7 +700,13 @@ let pickup (active_character : character) : bool =
   then (
     print_endline "This room has no scrap or items to pick up" ;
     false
-  ) else if List.length (!game_state.character_items active_character) >= 3 then (
+  ) else if
+      List.length
+        (List.filter
+           (fun i -> i != CoolantCanister)
+           (!game_state.character_items active_character) )
+      >= 3
+    then (
     print_endline (active_character.last_name ^ " cannot carry another item") ;
     false
   ) else
@@ -667,7 +747,8 @@ let pickup (active_character : character) : bool =
         done ;
         Printf.printf "%s picked up %d scrap\n" active_character.last_name
           !delta_scrap ;
-        set_character_scrap active_character !delta_scrap ;
+        set_character_scrap active_character
+          (!game_state.character_scraps active_character + !delta_scrap) ;
         set_room_scrap current_room
           (!game_state.num_scrap current_room - !delta_scrap) ;
         true
@@ -775,7 +856,13 @@ let craft (active_character : character) : bool =
     print_endline
       (active_character.last_name ^ " doesn't have any scrap to craft with") ;
     false
-  ) else if List.length (!game_state.character_items active_character) >= 3 then (
+  ) else if
+      List.length
+        (List.filter
+           (fun i -> i != CoolantCanister)
+           (!game_state.character_items active_character) )
+      >= 3
+    then (
     print_endline (active_character.last_name ^ " cannot carry another item") ;
     false
   ) else
@@ -1167,7 +1254,10 @@ let trigger_encounter (active_character : character) : unit =
           () ) ;
       match encounter with
       | Quiet ->
-          let target_room = select_random !game_state.map.rooms in
+          let target_room =
+            select_random
+              (List.filter (fun r -> not r.is_corridor) !game_state.map.rooms)
+          in
           Printf.printf "[ENCOUNTER] - All is quiet in %s. The xenomorph lurks."
             target_room.name ;
           if ash_in_play then
@@ -1229,7 +1319,7 @@ let trigger_encounter (active_character : character) : unit =
           else
             print_endline "" ;
           set_character_room active_character !game_state.map.ash_start_room ;
-          update_objectives () ;
+          update_objectives active_character ;
           ash_move 2
       | Order937_CrewExpendable ->
           Printf.printf "[ENCOUNTER] - %s loses all scrap!"
@@ -1311,6 +1401,9 @@ let game_loop () : unit =
      |==============================================|\n" ;
   print_endline "Press enter to continue" ;
   let _ = read_line () in
+  see_objectives () ;
+  print_endline "Press enter to continue" ;
+  let _ = read_line () in
   let broken = ref false in
   while not !broken do
     Printf.printf "=====Round %d=====\n" !game_state.round_count ;
@@ -1321,7 +1414,12 @@ let game_loop () : unit =
           {!game_state with turn_idx= i; active_character= Some active_character} ;
         Printf.printf "-----Turn %d-----\n" (1 + !game_state.turn_idx) ;
         match !game_state.self_destruct_count with
-        | Some x when i = 0 ->
+        | Some x
+          when match !game_state.self_destruct_character with
+               | None ->
+                   false
+               | Some c ->
+                   ch_eq c active_character ->
             game_state := {!game_state with self_destruct_count= Some (x - 1)} ;
             Printf.printf
               "[SELF-DESTRUCT] The Self-Destruct timer drops to %d!\n" (x - 1) ;
@@ -1383,7 +1481,7 @@ let game_loop () : unit =
                           do_encounter := false
                         ) ;
                         ash_move 0 ;
-                        update_objectives () ;
+                        update_objectives active_character ;
                         update_final_mission () )
                   | PickUp ->
                       action_successful := pickup active_character ;
