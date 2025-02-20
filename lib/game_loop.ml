@@ -1256,9 +1256,37 @@ let trigger_encounter (active_character : character) : unit =
             !game_state.characters ;
           ash_move 2 )
 
-(* TODO : When using motion tracker, if xeno spotted then 
-  set xeno to motion tracker target room, then
-        xeno_move 0 2*)
+(** Prompt player to use a [character]'s ability. Return whether the ability was 
+    used and whether it can be used again this turn *)
+let use_ability (c : character) : bool * bool =
+  match (c.ability, c.ability_description) with
+  | Some ability, Some description ->
+      if
+        confirm
+          (Some
+             (Printf.sprintf "Use %s's ability? (\"%s\")" c.last_name
+                description ) )
+      then (
+        let ao = ability !game_state.map c !game_state.characters in
+        (* Move characters *)
+        ( match ao.moved_character_index with
+        | None ->
+            ()
+        | Some idx -> (
+            let moved_char = List.nth !game_state.characters idx in
+            let old_room = locate_character moved_char in
+            match character_move moved_char [] true with
+            | None ->
+                ()
+            | Some new_room ->
+                Printf.printf "%s moved %s from %s to %s\n" c.last_name
+                  moved_char.last_name old_room.name new_room.name ) ) ;
+        (ao.used_action, ao.can_use_again_this_turn)
+      ) else
+        (false, false)
+  | _, _ ->
+      Printf.printf "%s's ability cannot be used right now.\n" c.last_name ;
+      (false, false)
 
 (** Main game loop *)
 let game_loop () : unit =
@@ -1296,6 +1324,7 @@ let game_loop () : unit =
         | _ ->
             let end_turn = ref false in
             let do_encounter = ref true in
+            let can_use_ability = ref true in
             for action_count = active_character.max_actions downto 1 do
               let action_successful = ref true in
               let first_try = ref true in
@@ -1357,7 +1386,11 @@ let game_loop () : unit =
                   | Drop ->
                       action_successful := drop active_character
                   | Ability ->
-                      unimplemented ~message:"Ability" ()
+                      let used_ability, can_use_again =
+                        use_ability active_character
+                      in
+                      action_successful := used_ability ;
+                      can_use_ability := !can_use_ability && can_use_again
                   | ViewInventory ->
                       view_inventory active_character ;
                       action_successful := false
