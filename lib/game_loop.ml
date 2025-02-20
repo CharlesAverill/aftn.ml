@@ -9,7 +9,6 @@ open Parker
 open Brett
 open Lambert
 open Selection
-open Random
 open Objective
 open Logging
 open Item
@@ -33,7 +32,7 @@ let lose_game ?(game_over : bool = true) (message : string) =
   exit 0
 
 (** Set up the game state given user preferences *)
-let setup_game (n_players : int) (n_characters : int) (use_ash : bool) : unit =
+let setup_game (n_characters : int) (use_ash : bool) : unit =
   (* Set random seed *)
   Random.self_init () ;
   game_state :=
@@ -56,10 +55,13 @@ let setup_game (n_players : int) (n_characters : int) (use_ash : bool) : unit =
             x )
         (* Place xenomorph *)
     ; ash_room=
-        List.find_index
-          (fun x -> x.name = !game_state.map.ash_start_room.name)
-          !game_state.map.rooms
-        (* Place Ash*) } ;
+        ( if use_ash then
+            List.find_index
+              (fun x -> x.name = !game_state.map.ash_start_room.name)
+              !game_state.map.rooms
+          else
+            None
+          (* Place Ash*) ) } ;
   List.iter
     (fun r ->
       let num_scrap = ref (!game_state.num_scrap r) in
@@ -269,7 +271,10 @@ let reduce_morale (n : int) (saw_xeno : bool) : unit =
     List.filter (character_has_item ElectricProd) !game_state.characters
   in
   let discount =
-    if (not (List.is_empty flashlight_chars)) && not (List.is_empty prod_chars)
+    if
+      saw_xeno
+      && (not (List.is_empty flashlight_chars))
+      && not (List.is_empty prod_chars)
     then (
       let options =
         List.map (fun c -> (c, Flashlight, 1)) flashlight_chars
@@ -738,7 +743,8 @@ let view_inventory ?(print_name : bool = false) ?(print_location : bool = true)
         active_character.last_name ^ " "
       else
         "" ) ;
-  Printf.printf "Location: %s\n" (locate_character active_character).name ;
+  if print_location then
+    Printf.printf "Location: %s\n" (locate_character active_character).name ;
   Printf.printf "Scrap: %d\n" (!game_state.character_scraps active_character) ;
   print_endline "Items:" ;
   List.iter
@@ -1135,7 +1141,7 @@ let trigger_encounter (active_character : character) : unit =
       | Some fm -> (
         match fm.kind with
         | AlienCrewLocationsEncounter
-            (target_xeno_room, target_character_rooms, encounter_check, _) ->
+            (target_xeno_room, target_character_rooms, _, _) ->
             let target_xeno_room = find_room !game_state.map target_xeno_room in
             let acceptable_xeno_rooms =
               target_xeno_room.name :: target_xeno_room.connections

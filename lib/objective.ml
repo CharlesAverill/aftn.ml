@@ -80,7 +80,7 @@ let string_of_final_mission (fm : final_mission) (n_characters : int)
     (rooms_with_events : room list) : string =
   Printf.sprintf "%s - %s" fm.goal_name
     ( match fm.kind with
-    | HurtAsh (health, morale_drop, attack_xeno) ->
+    | HurtAsh (health, _, attack_xeno) ->
         Printf.sprintf
           "Deal %d damage to destroy Ash. Current health: %d. Ash is damaged \
            and knocked back by using %s %s on him.Approaching Ash without %s \
@@ -98,8 +98,8 @@ let string_of_final_mission (fm : final_mission) (n_characters : int)
                 (string_of_item Incinerator)
             else
               " Defeat Ash to win." )
-    | DropItemsAndAssemble (items_locations, crew_items, room) ->
-        let items, locations = List.split items_locations in
+    | DropItemsAndAssemble (items_locations, _, room) ->
+        let items = fst (List.split items_locations) in
         Printf.sprintf
           "Drop %s. The crew's inventory must contain: %s. Assemble all crew \
            members in %s to win."

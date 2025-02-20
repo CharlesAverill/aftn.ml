@@ -24,6 +24,6 @@ let () =
          (read_file_lines (concat game_data_path "banner.txt")) ) ;
     print_endline "Press enter to continue" ;
     let _ = read_line () in
-    setup_game args.n_players args.n_characters args.use_ash ;
+    setup_game args.n_characters args.use_ash ;
     game_loop ()
   )

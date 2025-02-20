@@ -28,6 +28,8 @@ type character =
         (** Function that takes in current game state (map, activate character, all characters) and performs an action *)
   }
 
+type ability_function = map -> character -> character list -> ability_output
+
 let ch_eq c1 c2 : bool =
   c1.first_name = c2.first_name
   && c1.last_name = c2.last_name

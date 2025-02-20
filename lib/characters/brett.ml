@@ -1,7 +1,4 @@
 open Character
-open Map
-open Selection
-open Game_state
 
 let brett : character =
   { first_name= "Samson"

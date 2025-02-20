@@ -83,14 +83,14 @@ let rec transpose l =
       let first_column =
         x
         :: List.fold_left
-             (fun a i -> match i with [] -> a | h :: t -> h :: a)
+             (fun a i -> match i with [] -> a | h :: _ -> h :: a)
              [] l'
       in
       let rest_columns =
         transpose
           ( xs
           :: List.fold_left
-               (fun a i -> match i with [] -> a | h :: t -> t :: a)
+               (fun a i -> match i with [] -> a | _ :: t -> t :: a)
                [] l' )
       in
       first_column :: rest_columns

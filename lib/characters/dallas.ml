@@ -1,6 +1,4 @@
 open Character
-open Map
-open Selection
 
 let dallas : character =
   { first_name= "Arthur"

@@ -61,7 +61,7 @@ let trigger_event (active_character : character)
   in
   let jonesy_caught = !game_state.jonesy_caught in
   if !game_state.has_event target_room then (
-    let event, morale_delta = random_event () in
+    let event = fst (random_event ()) in
     ( match event with
     | NoEvent ->
         ()

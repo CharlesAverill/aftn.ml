@@ -2,7 +2,6 @@
 
 open Utils
 open Logging
-open Item
 
 type room =
   { name: string  (** Name of this room. If None, this room is a corridor *)
@@ -465,7 +464,7 @@ let shortest_path (m : map) (source : room) (dest : room) : room list =
     match !queue with
     | [] ->
         unreachable ()
-    | h :: t ->
+    | h :: _ ->
         (* u is node with minimum distance *)
         let min_node_dist, u =
           List.fold_left
@@ -532,7 +531,7 @@ let find_rooms_by_distance (m : map) (root : room) (distance : int) : room list
   fst
     (List.split
        (List.filter
-          (fun (r, dist) -> dist = distance)
+          (fun (_, dist) -> dist = distance)
           (List.map
              (fun (r, sp) ->
                ( r

@@ -4,7 +4,7 @@ open Selection
 open Game_state
 open Encounter
 
-let lambert_ability (_ : map) (_ : character) (chars : character list) :
+let lambert_ability (_ : map) (_ : character) (_ : character list) :
     ability_output =
   if List.length !game_state.encounters < 1 then (
     print_endline "No encounters to draw" ;

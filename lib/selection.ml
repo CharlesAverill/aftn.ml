@@ -1,6 +1,5 @@
 (** User selections from stdin *)
 
-open Utils
 open Logging
 open Unix
 
@@ -63,7 +62,6 @@ let rec get_int_selection ?(keys : char list = [])
       else
         (* Columns of height cutoff_height, rows of length (#options / cutoff_height) *)
         let col_width = List.length options / cutoff_height in
-        let rows = transpose (len_partition options cutoff_height) in
         let max_len =
           List.fold_left
             (fun a o ->

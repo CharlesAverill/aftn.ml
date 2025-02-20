@@ -53,7 +53,7 @@ let parse_arguments (game_data_path : string) : arguments =
       , "Print location of game data" ) ]
   in
   let usage_msg = "Usage: $PROJECT_NAME" in
-  Arg.parse speclist (fun n -> ()) usage_msg ;
+  Arg.parse speclist (fun _ -> ()) usage_msg ;
   { n_players= !n_players
   ; n_characters= !n_characters
   ; use_ash= !use_ash
