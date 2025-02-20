@@ -37,7 +37,6 @@ type state =
         (** [objective]s to complete before the final mission is revealed *)
   ; cleared_objectives: objective list
         (** [objective]s that have been cleared *)
-  ; on_final_mission: bool  (** Whether final mission is active *)
   ; final_mission: final_mission option
         (** What the game's final [objective] is *) }
 
@@ -62,7 +61,6 @@ let game_state : state ref =
     ; morale= 0
     ; objectives= []
     ; cleared_objectives= []
-    ; on_final_mission= false
     ; final_mission= None
     ; character_scraps= (fun _ -> 0)
     ; character_items= (fun _ -> [])
@@ -283,9 +281,21 @@ let set_xeno_room (r : room) : unit =
             List.find_index (fun x -> x.name = r.name) !game_state.map.rooms
           with
         | None ->
-            fatal rc_Error "set_xeno_error couldn't find index of room"
+            fatal rc_Error "set_xeno_room couldn't find index of room"
         | Some r ->
             r ) }
+
+let set_ash_room (r : room) : unit =
+  game_state :=
+    { !game_state with
+      ash_room=
+        ( match
+            List.find_index (fun x -> x.name = r.name) !game_state.map.rooms
+          with
+        | None ->
+            fatal rc_Error "get_xeno_room couldn't find index of room"
+        | Some r ->
+            Some r ) }
 
 (* Objectives state *)
 

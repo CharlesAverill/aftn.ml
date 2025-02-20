@@ -456,6 +456,7 @@ let reset_search (dist : int) : unit =
     ; discovered= (fun _ -> false)
     ; previous_room= (fun _ -> "") }
 
+(** Find the shortest path in [m] from [source] to [dest] *)
 let shortest_path (m : map) (source : room) (dest : room) : room list =
   reset_search (Int32.to_int Int32.max_int) ;
   set_room_distance source 0 ;
@@ -525,6 +526,7 @@ let shortest_path (m : map) (source : room) (dest : room) : room list =
   | Some x ->
       x
 
+(** Find rooms in [m] that are exactly [distance] steps away from [root] *)
 let find_rooms_by_distance (m : map) (root : room) (distance : int) : room list
     =
   fst
@@ -537,6 +539,10 @@ let find_rooms_by_distance (m : map) (root : room) (distance : int) : room list
                , List.length sp
                  - 1 (* Subtract 1 because path includes source room *) ) )
              (List.map (fun r -> (r, shortest_path m root r)) m.rooms) ) ) )
+
+let find_rooms_within_distance (m : map) (root : room) (distance : int) :
+    room list =
+  List.concat (List.map (find_rooms_by_distance m root) (range 1 distance))
 
 (* let results = ref [] in
   reset_search Int.max_int ;

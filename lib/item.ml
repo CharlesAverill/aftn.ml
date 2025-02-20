@@ -57,3 +57,9 @@ let cost_of_item = function
 
 let craftable_items =
   [Flashlight; MotionTracker; GrappleGun; ElectricProd; Incinerator]
+
+let item_uses_action = function
+  | Flashlight | CoolantCanister ->
+      false
+  | _ ->
+      true

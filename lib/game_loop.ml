@@ -184,7 +184,7 @@ let see_objectives () : unit =
       (fun o -> print_endline (string_of_objective o))
       !game_state.cleared_objectives
   ) ;
-  if !game_state.on_final_mission then (
+  if !game_state.final_mission != None then (
     print_endline "=====FINAL MISSION=====" ;
     match !game_state.final_mission with
     | None ->
@@ -204,7 +204,7 @@ let see_objectives () : unit =
 
 (** Check if final mission criteria have been met, win game if so *)
 let update_final_mission () : unit =
-  if !game_state.on_final_mission then
+  if !game_state.final_mission != None then
     if
       match !game_state.final_mission with
       | None ->
@@ -212,7 +212,8 @@ let update_final_mission () : unit =
       | Some fm -> (
         match fm.kind with
         | HurtAsh _ ->
-            unimplemented ()
+            (* This check is performed in use_item *)
+            false
         | DropItemsAndAssemble (items_locations, required_crew_items, room) ->
             let room = find_room !game_state.map room in
             let items_locations_correct =
@@ -258,6 +259,270 @@ let update_final_mission () : unit =
               !game_state.map.rooms )
     then
       win_game ()
+
+(** Reduce morale by [n] and check for morale-loss-reduction items and game over *)
+let reduce_morale (n : int) (saw_xeno : bool) : unit =
+  let flashlight_chars =
+    List.filter (character_has_item Flashlight) !game_state.characters
+  in
+  let prod_chars =
+    List.filter (character_has_item ElectricProd) !game_state.characters
+  in
+  let discount =
+    if (not (List.is_empty flashlight_chars)) && not (List.is_empty prod_chars)
+    then (
+      let options =
+        List.map (fun c -> (c, Flashlight, 1)) flashlight_chars
+        @ List.map (fun c -> (c, ElectricProd, 2)) prod_chars
+      in
+      match
+        get_int_selection ~back_string:"No"
+          "These characters have a FLASHLIGHT or an ELECTRIC PROD, would you \
+           like to use one to reduce morale lost by 1 or 2, respectively?"
+          (List.map
+             (fun (c, i, m) ->
+               Printf.sprintf "%s has %s %s - reduce lost morale by %d"
+                 c.last_name (article_of_item i) (string_of_item i) m )
+             options )
+          true
+      with
+      | None ->
+          0
+      | Some idx ->
+          let use_character, i, discount = List.nth options idx in
+          remove_character_item use_character i ;
+          discount
+    ) else
+      0
+  in
+  game_state := {!game_state with morale= !game_state.morale - (n - discount)} ;
+  if !game_state.morale <= 0 then lose_game "Morale dropped to 0" ;
+  Printf.printf "=====Morale drops by %d, morale is now %d=====\n"
+    (n - discount) !game_state.morale
+
+(** Prompt player for room to move to, return [None] if action canceled *)
+let character_move (active_character : character) (allowed_moves : room list)
+    (allow_back : bool) : room option =
+  let ladder =
+    if allowed_moves = [] then
+      (locate_character active_character).ladder_connection
+    else
+      None
+  in
+  let allowed_moves =
+    ( if allowed_moves = [] then
+        (locate_character active_character).connections
+      else
+        List.map (fun r -> r.name) allowed_moves )
+    @ match ladder with None -> [] | Some r -> [r]
+  in
+  match
+    get_int_selection "Destinations:"
+      (List.map
+         (fun r ->
+           r ^ match ladder with Some x when x = r -> " (ladder)" | _ -> "" )
+         (List.map
+            (fun s ->
+              if int_of_string_opt s = None then
+                s
+              else
+                "Corridor " ^ s )
+            allowed_moves ) )
+      allow_back
+  with
+  | None ->
+      None
+  | Some i ->
+      let r = find_room !game_state.map (List.nth allowed_moves i) in
+      Printf.printf "%s moved from %s to %s\n" active_character.last_name
+        (locate_character active_character).name r.name ;
+      set_character_room active_character r ;
+      update_objectives () ;
+      Some r
+
+(** Force a character to move 3 spaces away *)
+let flee (active_character : character) : unit =
+  Printf.printf "!!!!!%s must flee 3 spaces!!!!!\n" active_character.last_name ;
+  let allowed_moves =
+    find_rooms_by_distance !game_state.map (locate_character active_character) 3
+  in
+  ( match character_move active_character allowed_moves false with
+  | None ->
+      fatal rc_Error "Failed to select move while fleeing"
+  | Some x ->
+      set_character_room active_character x ) ;
+  update_objectives ()
+
+(** Move the xenomorph closer to the closest team member *)
+let xeno_move (num_spaces : int) (morale_drop : int) : bool =
+  let shortest_path_to_nearest_char =
+    match
+      List.map
+        (shortest_path !game_state.map (get_xeno_room ()))
+        (List.map locate_character !game_state.characters)
+    with
+    | [] ->
+        fatal rc_Error "list of shortest paths to each character is empty"
+    | h :: t ->
+        List.fold_left
+          (fun a l ->
+            if List.length l < List.length a then
+              l
+            else
+              a )
+          h t
+  in
+  set_xeno_room
+    (List.nth shortest_path_to_nearest_char
+       (min num_spaces (List.length shortest_path_to_nearest_char - 1)) ) ;
+  let saw_xeno = ref false in
+  List.iter
+    (fun c ->
+      if locate_character c = get_xeno_room () then (
+        if not !saw_xeno then (
+          saw_xeno := true ;
+          Printf.printf "!!!!!The Xenomorph meets you in %s!!!!!\n"
+            (get_xeno_room ()).name
+        ) ;
+        reduce_morale morale_drop true ;
+        flee c
+      ) )
+    !game_state.characters ;
+  !saw_xeno
+
+let check_ash_health () : unit =
+  match !game_state.final_mission with
+  | Some fm -> (
+    match fm.kind with
+    | HurtAsh (_, _, hurt_xeno) when not !game_state.ash_killed ->
+        if !game_state.ash_health = 0 then (
+          game_state := {!game_state with ash_killed= true} ;
+          if hurt_xeno then
+            Printf.printf
+              "[FINAL OBJECTIVE] - You've defeated Ash! Use %s %s on the \
+               xenomorph to escape!\n"
+              (article_of_item Incinerator)
+              (string_of_item Incinerator)
+          else
+            win_game ()
+        ) else
+          Printf.printf "[FINAl OBJECTIVE] - Ash health = %d\n"
+            !game_state.ash_health
+    | _ ->
+        () )
+  | _ ->
+      ()
+
+let rec ash_move (num_spaces : int) : unit =
+  match !game_state.ash_room with
+  | Some ash_room when not !game_state.ash_killed ->
+      let ash_room = List.nth !game_state.map.rooms ash_room in
+      let hurt_ash_active =
+        match !game_state.final_mission with
+        | None ->
+            false
+        | Some fm -> (
+          match fm.kind with HurtAsh _ -> true | _ -> false )
+      in
+      let shortest_path_to_nearest_char =
+        match
+          List.map
+            (shortest_path !game_state.map ash_room)
+            (List.map locate_character !game_state.characters)
+        with
+        | [] ->
+            fatal rc_Error "list of shortest paths to each character is empty"
+        | h :: t ->
+            List.fold_left
+              (fun a l ->
+                if List.length l < List.length a then
+                  l
+                else
+                  a )
+              h t
+      in
+      let shortest_path_to_nearest_scrap_room =
+        match
+          List.map
+            (shortest_path !game_state.map ash_room)
+            (List.filter
+               (fun r -> !game_state.num_scrap r > 0)
+               !game_state.map.rooms )
+        with
+        | [] ->
+            []
+        | h :: t ->
+            List.fold_left
+              (fun a l ->
+                if List.length l < List.length a then
+                  l
+                else
+                  a )
+              h t
+      in
+      let target_path =
+        if hurt_ash_active then
+          shortest_path_to_nearest_char
+        else if
+          List.length shortest_path_to_nearest_char
+          < List.length shortest_path_to_nearest_scrap_room
+        then
+          shortest_path_to_nearest_char
+        else
+          shortest_path_to_nearest_scrap_room
+      in
+      let ash_room =
+        List.nth target_path (min num_spaces (List.length target_path - 1))
+      in
+      set_ash_room ash_room ;
+      set_room_scrap ash_room 0 ;
+      let saw_ash = ref false in
+      List.iter
+        (fun c ->
+          if locate_character c = ash_room then (
+            if not !saw_ash then (
+              saw_ash := true ;
+              Printf.printf "!!!!!Ash meets you in %s!!!!!\n" ash_room.name
+            ) ;
+            if hurt_ash_active then
+              if !game_state.character_scraps c > 0 then (
+                Printf.printf "%s lost %d scrap!\n" c.last_name 1 ;
+                set_character_scrap c (!game_state.character_scraps c - 1)
+              ) else (
+                Printf.printf "%s has no scrap to lose!\n" c.last_name ;
+                reduce_morale 1 false
+              )
+            else if character_has_item CoolantCanister c then (
+              Printf.printf "%s uses %s %s to hurt Ash!\n" c.last_name
+                (article_of_item CoolantCanister)
+                (string_of_item CoolantCanister) ;
+              remove_character_item c CoolantCanister ;
+              game_state :=
+                {!game_state with ash_health= !game_state.ash_health - 1} ;
+              (* Move Ash away *)
+              let ash_locations =
+                find_rooms_within_distance !game_state.map ash_room 3
+              in
+              match
+                get_int_selection "Where to send ash to?"
+                  (List.map (fun r -> r.name) ash_locations)
+                  false
+              with
+              | None ->
+                  unreachable ()
+              | Some idx ->
+                  let ash_room' = List.nth ash_locations idx in
+                  set_ash_room ash_room' ;
+                  Printf.printf "Ash retreats to %s!\n" ash_room'.name ;
+                  ash_move 0
+            ) else (
+              reduce_morale 3 false ; flee c
+            ) ;
+            check_ash_health ()
+          ) )
+        !game_state.characters
+  | _ ->
+      ()
 
 (** Possible turn actions *)
 type action =
@@ -344,46 +609,6 @@ let action_select_chars =
 
 let single_player_action_select_chars =
   ['m'; 'p'; 'd'; 'a'; 'i'; 'k'; 'c'; 'u'; 'e'; 'v'; 'o'; 'M'; 'x']
-
-(** Prompt player for room to move to, return [None] if action canceled *)
-let character_move (active_character : character) (allowed_moves : room list)
-    (allow_back : bool) : room option =
-  let ladder =
-    if allowed_moves = [] then
-      (locate_character active_character).ladder_connection
-    else
-      None
-  in
-  let allowed_moves =
-    ( if allowed_moves = [] then
-        (locate_character active_character).connections
-      else
-        List.map (fun r -> r.name) allowed_moves )
-    @ match ladder with None -> [] | Some r -> [r]
-  in
-  match
-    get_int_selection "Destinations:"
-      (List.map
-         (fun r ->
-           r ^ match ladder with Some x when x = r -> " (ladder)" | _ -> "" )
-         (List.map
-            (fun s ->
-              if int_of_string_opt s = None then
-                s
-              else
-                "Corridor " ^ s )
-            allowed_moves ) )
-      allow_back
-  with
-  | None ->
-      None
-  | Some i ->
-      let r = find_room !game_state.map (List.nth allowed_moves i) in
-      Printf.printf "%s moved from %s to %s\n" active_character.last_name
-        (locate_character active_character).name r.name ;
-      set_character_room active_character r ;
-      update_objectives () ;
-      Some r
 
 (** Prompt player for item/scrap to pick up. If an [item] is selected, [true]
     is returned to indicate the turn is over, otherwise [false].
@@ -765,8 +990,106 @@ let trade_item (active_character : character) : bool =
         | _ ->
             false )
 
-let use_item (c : character) (i : item) : unit =
-  unimplemented ~message:"use_item" ()
+let use (c : character) : bool =
+  let usable_items =
+    List.filter item_uses_action (!game_state.character_items c)
+  in
+  match usable_items with
+  | [] ->
+      Printf.printf "%s has no items to use.\n" c.last_name ;
+      false
+  | _ -> (
+    match
+      get_int_selection
+        (Printf.sprintf "Which item will %s use?" c.last_name)
+        (List.map string_of_item usable_items)
+        true
+    with
+    | None ->
+        false
+    | Some idx -> (
+      match List.nth usable_items idx with
+      | MotionTracker -> (
+        match
+          find_rooms_within_distance !game_state.map (locate_character c) 2
+        with
+        | [] ->
+            print_endline "There are no scannable rooms nearby." ;
+            false
+        | l -> (
+          match
+            get_int_selection "Which room to scan?"
+              (List.map (fun r -> r.name) l)
+              true
+          with
+          | None ->
+              false
+          | Some idx ->
+              let room = List.nth l idx in
+              remove_character_item c MotionTracker ;
+              let _ = trigger_event c (Some room) in
+              true ) )
+      | GrappleGun -> (
+          let shortest_path_to_xenomorph =
+            shortest_path !game_state.map (get_xeno_room ())
+              (locate_character c)
+          in
+          if
+            not
+              ( List.length shortest_path_to_xenomorph
+              <= 3 + 1 (* +1 because contains source *) )
+          then (
+            print_endline "The xenomorph is not close enough!" ;
+            false
+          ) else
+            let xeno_locations =
+              find_rooms_within_distance !game_state.map (get_xeno_room ()) 3
+            in
+            match
+              get_int_selection "Where to send the xenomorph to?"
+                (List.map (fun r -> r.name) xeno_locations)
+                false
+            with
+            | None ->
+                unreachable ()
+            | Some idx ->
+                let loc = List.nth xeno_locations idx in
+                remove_character_item c GrappleGun ;
+                Printf.printf "The xenomorph retreats to %s!\n" loc.name ;
+                set_xeno_room loc ;
+                let _ = xeno_move 0 2 in
+                true )
+      | Incinerator ->
+          let shortest_path_to_xenomorph =
+            shortest_path !game_state.map (get_xeno_room ())
+              (locate_character c)
+          in
+          if
+            not
+              ( List.length shortest_path_to_xenomorph
+              <= 3 + 1 (* +1 because contains source *) )
+          then (
+            print_endline "The xenomorph is not close enough!" ;
+            false
+          ) else (
+            remove_character_item c Incinerator ;
+            Printf.printf "The xenomorph retreats to %s!\n"
+              !game_state.map.xeno_start_room.name ;
+            set_xeno_room !game_state.map.xeno_start_room ;
+            (* Check HurtAsh final missions *)
+            ( match !game_state.final_mission with
+            | None ->
+                ()
+            | Some fm -> (
+              match fm.kind with
+              | HurtAsh _ ->
+                  if !game_state.ash_killed then win_game ()
+              | _ ->
+                  () ) ) ;
+            true
+          )
+      | i ->
+          fatal rc_Error ("Unreachable path via item " ^ string_of_item i) ) )
 
 (** Print out room information *)
 let view_room (active_character : character) : unit =
@@ -798,96 +1121,6 @@ let view_room (active_character : character) : unit =
       ()
   | Some s ->
       Printf.printf "Ladder connection: %s\n" s
-
-(** Reduce morale and check for morale-loss-reduction items and game over *)
-let reduce_morale (n : int) (saw_xeno : bool) : unit =
-  let flashlight_chars =
-    List.filter (character_has_item Flashlight) !game_state.characters
-  in
-  let prod_chars =
-    List.filter (character_has_item ElectricProd) !game_state.characters
-  in
-  let discount =
-    if (not (List.is_empty flashlight_chars)) && not (List.is_empty prod_chars)
-    then (
-      let options =
-        List.map (fun c -> (c, Flashlight, 1)) flashlight_chars
-        @ List.map (fun c -> (c, ElectricProd, 2)) prod_chars
-      in
-      match
-        get_int_selection ~back_string:"No"
-          "These characters have a FLASHLIGHT or an ELECTRIC PROD, would you \
-           like to use one to reduce morale lost by 1 or 2, respectively?"
-          (List.map
-             (fun (c, i, m) ->
-               Printf.sprintf "%s has %s %s - reduce lost morale by %d"
-                 c.last_name (article_of_item i) (string_of_item i) m )
-             options )
-          true
-      with
-      | None ->
-          0
-      | Some idx ->
-          let use_character, i, discount = List.nth options idx in
-          use_item use_character i ; discount
-    ) else
-      0
-  in
-  game_state := {!game_state with morale= !game_state.morale - (n - discount)} ;
-  if !game_state.morale <= 0 then lose_game "Morale dropped to 0"
-
-(** Force a character to move 3 spaces away *)
-let flee (active_character : character) : unit =
-  Printf.printf "!!!!!%s must flee 3 spaces!!!!!\n" active_character.last_name ;
-  let allowed_moves =
-    find_rooms_by_distance !game_state.map (locate_character active_character) 3
-  in
-  ( match character_move active_character allowed_moves false with
-  | None ->
-      fatal rc_Error "Failed to select move while fleeing"
-  | Some x ->
-      set_character_room active_character x ) ;
-  update_objectives ()
-
-(** Move the xenomorph closer to the closest team member *)
-let xeno_move (num_spaces : int) (morale_drop : int) : bool =
-  let shortest_path_to_nearest_char =
-    match
-      List.map
-        (shortest_path !game_state.map
-           (List.nth !game_state.map.rooms !game_state.xeno_room) )
-        (List.map locate_character !game_state.characters)
-    with
-    | [] ->
-        fatal rc_Error "list of shortest paths to each character is empty"
-    | h :: t ->
-        List.fold_left
-          (fun a l ->
-            if List.length l < List.length a then
-              l
-            else
-              a )
-          h t
-  in
-  set_xeno_room
-    (List.nth shortest_path_to_nearest_char
-       (min num_spaces (List.length shortest_path_to_nearest_char - 1)) ) ;
-  let saw_xeno = ref false in
-  List.iter
-    (fun c ->
-      if locate_character c = get_xeno_room () then (
-        if not !saw_xeno then (
-          saw_xeno := true ;
-          Printf.printf "!!!!!The Xenomorph meets you in %s!!!!!\n"
-            (get_xeno_room ()).name
-        ) ;
-        reduce_morale morale_drop true ;
-        flee c
-      ) )
-    !game_state.characters ;
-  !saw_xeno
-
-let ash_move n : unit = unimplemented ~message:"ash_move" ()
 
 (** Draw an encounter card and execute it *)
 let trigger_encounter (active_character : character) : unit =
@@ -1134,7 +1367,7 @@ let game_loop () : unit =
                   | Craft ->
                       action_successful := craft active_character
                   | UseItem ->
-                      unimplemented ~message:"UseItem" ()
+                      action_successful := use active_character
                   | TradeItem ->
                       action_successful := trade_item active_character ;
                       if not !action_successful then
