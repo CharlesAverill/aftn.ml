@@ -5,8 +5,8 @@ implemented in OCaml (see my original [C implementation](https://github.com/Char
 
 ## Installation
 
-### Full Install
 ```sh
+opam install . --deps-only
 dune install
 ```
 

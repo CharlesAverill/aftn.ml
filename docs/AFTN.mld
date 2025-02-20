@@ -9,9 +9,9 @@ Build date: AFTN_BUILD_DATE
 
 {1 Installation}
 
-{2 Full Install}
 
 {@sh[
+  opam install . --deps-only
   dune install
 ]}
 
