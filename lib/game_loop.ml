@@ -122,10 +122,142 @@ let setup_game (n_players : int) (n_characters : int) (use_ash : bool) : unit =
           get_objectives (n_characters + 1) (* Get random objectives *) } ;
     shuffle_encounters ()
 
-(** TODO : implement *)
-let update_objectives () = ()
+let complete_objective o =
+  Printf.printf "[OBJECTIVE] - Completed objective \"%s\"!\n" o.goal_name ;
+  clear_objective o
 
-let update_final_mission () = ()
+(** Check uncleared objectives and clear them if conditions are met *)
+let update_objectives () : unit =
+  List.iter
+    (fun o ->
+      match o.kind with
+      | BringItemToLocation (i, room) ->
+          let room = find_room !game_state.map room in
+          (* Clear if applicable *)
+          let _ =
+            List.fold_left
+              (fun cleared c ->
+                if
+                  (not cleared)
+                  && locate_character c = room
+                  && character_has_item i c
+                then (
+                  complete_objective o ; true
+                ) else
+                  cleared )
+              false !game_state.characters
+          in
+          ()
+      | CrewAtLocationWithMinimumScrap (room, n_scrap) ->
+          let room = find_room !game_state.map room in
+          if
+            List.fold_left
+              (fun a c ->
+                a
+                && !game_state.character_scraps c >= n_scrap
+                && locate_character c = room )
+              true !game_state.characters
+          then
+            complete_objective o
+      | DropCoolant (n_coolant, room) ->
+          let room = find_room !game_state.map room in
+          if
+            List.length
+              (List.filter
+                 (fun i -> i = CoolantCanister)
+                 (!game_state.room_items room) )
+            >= n_coolant
+          then
+            complete_objective o )
+    !game_state.objectives
+
+let see_objectives () : unit =
+  if List.length !game_state.objectives > 0 then (
+    print_endline "=====OBJECTIVES=====" ;
+    List.iter
+      (fun o -> print_endline (string_of_objective o))
+      !game_state.objectives
+  ) ;
+  if List.length !game_state.cleared_objectives > 0 then (
+    print_endline "=====CLEARED OBJECTIVES=====" ;
+    List.iter
+      (fun o -> print_endline (string_of_objective o))
+      !game_state.cleared_objectives
+  ) ;
+  if !game_state.on_final_mission then (
+    print_endline "=====FINAL MISSION=====" ;
+    match !game_state.final_mission with
+    | None ->
+        unreachable ()
+    | Some fm ->
+        print_endline
+          (string_of_final_mission fm
+             (List.length !game_state.characters)
+             ( match !game_state.self_destruct_count with
+             | None ->
+                 0
+             | Some x ->
+                 x )
+             !game_state.ash_health
+             (List.filter !game_state.has_event !game_state.map.rooms) )
+  )
+
+(** Check if final mission criteria have been met, win game if so *)
+let update_final_mission () : unit =
+  if !game_state.on_final_mission then
+    if
+      match !game_state.final_mission with
+      | None ->
+          unreachable ()
+      | Some fm -> (
+        match fm.kind with
+        | HurtAsh _ ->
+            unimplemented ()
+        | DropItemsAndAssemble (items_locations, required_crew_items, room) ->
+            let room = find_room !game_state.map room in
+            let items_locations_correct =
+              List.fold_left
+                (fun a (i, r) ->
+                  let room = find_room !game_state.map r in
+                  a
+                  && List.length
+                       (List.filter
+                          (fun x -> x = i)
+                          (!game_state.room_items room) )
+                     >= List.length !game_state.characters )
+                true items_locations
+            in
+            let crew_items =
+              List.fold_left
+                (fun a c -> a @ !game_state.character_items c)
+                [] !game_state.characters
+            in
+            let crew_items_correct =
+              List.for_all
+                (fun i -> List.exists (fun x -> x = i) crew_items)
+                required_crew_items
+            in
+            items_locations_correct && crew_items_correct
+            && List.for_all
+                 (fun c -> locate_character c = room)
+                 !game_state.characters
+        | AlienCrewLocationsEncounter _ ->
+            (* This check is performed in trigger_encounter *)
+            false
+        | SelfDestructAssemble (_, room, item, n_scrap) ->
+            let room = find_room !game_state.map room in
+            List.for_all
+              (fun c ->
+                locate_character c = room
+                && character_has_item item c
+                && !game_state.character_scraps c >= n_scrap )
+              !game_state.characters
+        | SelfDestructClear _ ->
+            List.for_all
+              (fun r -> not (!game_state.has_event r))
+              !game_state.map.rooms )
+    then
+      win_game ()
 
 (** Possible turn actions *)
 type action =
@@ -140,7 +272,6 @@ type action =
   | TradeItem
   | EndTurn
   | ViewRoom
-  | ViewCharacterLocations
   | SeeObjectives
   | DrawMap
   | Exit
@@ -169,8 +300,6 @@ let string_of_action = function
       "End turn early"
   | ViewRoom ->
       "View current room"
-  | ViewCharacterLocations ->
-      "View team locations"
   | SeeObjectives ->
       "View objectives"
   | DrawMap ->
@@ -232,7 +361,6 @@ let character_move (active_character : character) (allowed_moves : room list)
         List.map (fun r -> r.name) allowed_moves )
     @ match ladder with None -> [] | Some r -> [r]
   in
-  update_objectives () ;
   match
     get_int_selection "Destinations:"
       (List.map
@@ -249,17 +377,13 @@ let character_move (active_character : character) (allowed_moves : room list)
   with
   | None ->
       None
-  | Some i -> (
-    match find_room !game_state.map (List.nth allowed_moves i) with
-    | None ->
-        _log Log_Error
-          "find_room in character_move returned None when it shouldn't have" ;
-        None
-    | Some r ->
-        Printf.printf "%s moved from %s to %s\n" active_character.last_name
-          (locate_character active_character).name r.name ;
-        set_character_room active_character r ;
-        Some r )
+  | Some i ->
+      let r = find_room !game_state.map (List.nth allowed_moves i) in
+      Printf.printf "%s moved from %s to %s\n" active_character.last_name
+        (locate_character active_character).name r.name ;
+      set_character_room active_character r ;
+      update_objectives () ;
+      Some r
 
 (** Prompt player for item/scrap to pick up. If an [item] is selected, [true]
     is returned to indicate the turn is over, otherwise [false].
@@ -641,7 +765,8 @@ let trade_item (active_character : character) : bool =
         | _ ->
             false )
 
-let use_item (c : character) (i : item) : unit = ()
+let use_item (c : character) (i : item) : unit =
+  unimplemented ~message:"use_item" ()
 
 (** Print out room information *)
 let view_room (active_character : character) : unit =
@@ -762,7 +887,7 @@ let xeno_move (num_spaces : int) (morale_drop : int) : bool =
     !game_state.characters ;
   !saw_xeno
 
-let ash_move n : unit = ()
+let ash_move n : unit = unimplemented ~message:"ash_move" ()
 
 (** Draw an encounter card and execute it *)
 let trigger_encounter (active_character : character) : unit =
@@ -777,30 +902,26 @@ let trigger_encounter (active_character : character) : unit =
       | Some fm -> (
         match fm.kind with
         | AlienCrewLocationsEncounter
-            (target_xeno_room, target_character_rooms, encounter_check) -> (
-          match find_room !game_state.map target_xeno_room with
-          | None ->
-              fatal rc_Error
-                ("Final mission has invalid xeno room " ^ target_xeno_room)
-          | Some target_xeno_room ->
-              let acceptable_xeno_rooms =
-                target_xeno_room.name :: target_xeno_room.connections
-              in
-              let xeno_in_right_place =
-                List.exists
-                  (fun s -> s = (get_xeno_room ()).name)
-                  acceptable_xeno_rooms
-              in
-              let characters_in_right_places =
-                List.for_all
-                  (fun s ->
-                    List.exists
-                      (fun (_, r) -> r.name = s)
-                      (character_locations ()) )
-                  target_character_rooms
-              in
-              if xeno_in_right_place && characters_in_right_places then
-                win_game () )
+            (target_xeno_room, target_character_rooms, encounter_check, _) ->
+            let target_xeno_room = find_room !game_state.map target_xeno_room in
+            let acceptable_xeno_rooms =
+              target_xeno_room.name :: target_xeno_room.connections
+            in
+            let xeno_in_right_place =
+              List.exists
+                (fun s -> s = (get_xeno_room ()).name)
+                acceptable_xeno_rooms
+            in
+            let characters_in_right_places =
+              List.for_all
+                (fun s ->
+                  List.exists
+                    (fun (_, r) -> r.name = s)
+                    (character_locations ()) )
+                target_character_rooms
+            in
+            if xeno_in_right_place && characters_in_right_places then
+              win_game ()
         | _ ->
             () )
       | _ ->
@@ -1003,7 +1124,7 @@ let game_loop () : unit =
                   | Drop ->
                       action_successful := drop active_character
                   | Ability ->
-                      unimplemented ()
+                      unimplemented ~message:"Ability" ()
                   | ViewInventory ->
                       view_inventory active_character ;
                       action_successful := false
@@ -1013,7 +1134,7 @@ let game_loop () : unit =
                   | Craft ->
                       action_successful := craft active_character
                   | UseItem ->
-                      unimplemented ()
+                      unimplemented ~message:"UseItem" ()
                   | TradeItem ->
                       action_successful := trade_item active_character ;
                       if not !action_successful then
@@ -1033,10 +1154,9 @@ let game_loop () : unit =
                   | ViewRoom ->
                       view_room active_character ;
                       action_successful := false
-                  | ViewCharacterLocations ->
-                      unimplemented ()
                   | SeeObjectives ->
-                      unimplemented ()
+                      see_objectives () ;
+                      action_successful := false
                   | DrawMap ->
                       ( match !game_state.map.ascii_map with
                       | None ->

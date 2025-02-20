@@ -7,7 +7,8 @@ type item =
   | CoolantCanister
   | CatCarrier
 
-let string_of_item = function
+let string_of_item ?(plural : bool = false) (i : item) =
+  ( match i with
   | Incinerator ->
       "INCINERATOR"
   | Flashlight ->
@@ -21,7 +22,12 @@ let string_of_item = function
   | CoolantCanister ->
       "COOLANT CANISTER"
   | CatCarrier ->
-      "CAT CARRIER"
+      "CAT CARRIER" )
+  ^
+  if plural then
+    "S"
+  else
+    ""
 
 (** Which indefinite article to use when referring to the item *)
 let article_of_item i =

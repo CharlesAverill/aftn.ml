@@ -46,13 +46,20 @@ type map =
   ; (* ASCII representation of map *)
     ascii_map: string option }
 
-let find_room (m : map) (name : string) : room option =
+let find_room_opt (m : map) (name : string) : room option =
   List.find_opt (fun r -> r.name = name) m.rooms
+
+let find_room (m : map) (name : string) : room =
+  match find_room_opt m name with
+  | None ->
+      fatal rc_Error ("find_room failure: " ^ name)
+  | Some x ->
+      x
 
 (** Get a [string] representation of a [map] that is equivalent to the input map file *)
 let map_file_of_map m =
   let find_room x =
-    match find_room m x with None -> blank_room | Some r -> r
+    match find_room_opt m x with None -> blank_room | Some r -> r
   in
   Printf.sprintf
     "%s\n\
@@ -295,7 +302,7 @@ let parse_map_file (map_fn : string) : map =
                        List.fold_left
                          (fun m r2_name ->
                            match
-                             (find_room m room_name, find_room m r2_name)
+                             (find_room_opt m room_name, find_room_opt m r2_name)
                            with
                            | Some r1, Some r2 ->
                                update_map_room
@@ -313,7 +320,7 @@ let parse_map_file (map_fn : string) : map =
                  | Ladders -> (
                    match String.split_on_char ';' line with
                    | [first; second] -> (
-                     match (find_room m first, find_room m second) with
+                     match (find_room_opt m first, find_room_opt m second) with
                      | Some first, Some second ->
                          { m with
                            rooms=
@@ -342,7 +349,7 @@ let parse_map_file (map_fn : string) : map =
                          scrap_rooms=
                            List.map
                              (fun x ->
-                               match find_room m x with
+                               match find_room_opt m x with
                                | None ->
                                    _log Log_Warning
                                      ( "Failed to find room " ^ x
@@ -361,7 +368,7 @@ let parse_map_file (map_fn : string) : map =
                          event_rooms=
                            List.map
                              (fun x ->
-                               match find_room m x with
+                               match find_room_opt m x with
                                | None ->
                                    _log Log_Warning
                                      ( "Failed to find room " ^ x
@@ -380,7 +387,7 @@ let parse_map_file (map_fn : string) : map =
                          coolant_rooms=
                            List.map
                              (fun x ->
-                               match find_room m x with
+                               match find_room_opt m x with
                                | None ->
                                    _log Log_Warning
                                      ( "Failed to find room " ^ x
@@ -480,7 +487,7 @@ let shortest_path (m : map) (source : room) (dest : room) : room list =
             ) )
           (List.map
              (fun r ->
-               match find_room m r with
+               match find_room_opt m r with
                | None ->
                    fatal rc_Error
                      "shortest_path couldn't find room at distance update"
@@ -500,7 +507,7 @@ let shortest_path (m : map) (source : room) (dest : room) : room list =
         unreachable ()
     | Some x -> (
         shortest := Some (x :: s) ;
-        match find_room m (!active_search_params.previous_room x.name) with
+        match find_room_opt m (!active_search_params.previous_room x.name) with
         | None ->
             if x = source then
               u := None
