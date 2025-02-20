@@ -3,7 +3,6 @@ open Item
 open Character
 open Game_state
 open Selection
-open Logging
 
 type event = NoEvent | SafeEvent | JonesyEvent | XenoEvent
 
@@ -44,7 +43,7 @@ let random_event () : event * int =
               remove_character_item catcher CatCarrier ;
               Printf.printf "%s used the %s to catch Jonesy\n" catcher.last_name
                 (string_of_item CatCarrier) ;
-              game_state := {!game_state with jonesy_caught= true} ;
+              catch_jonesy () ;
               0 )
   | _ ->
       (XenoEvent, Random.int_in_range ~min:1 ~max:2)
@@ -85,37 +84,11 @@ let trigger_event (active_character : character)
               "[EVENT] - Safe" )
     | XenoEvent when uses_motion_tracker ->
         Printf.printf "%s\n" "Something huge and fast. The Xenomorph?" ;
-        game_state :=
-          { !game_state with
-            xeno_room=
-              ( match
-                  List.find_index
-                    (fun r -> r.name = target_room.name)
-                    !game_state.map.rooms
-                with
-              | None ->
-                  _log Log_Error
-                    "Couldn't place xenomorph in motion tracker room" ;
-                  !game_state.xeno_room
-              | Some x ->
-                  x ) }
+        set_xeno_room target_room
     | XenoEvent ->
         Printf.printf "%s\n" "[EVENT] - Surprise attack!" ;
         Printf.printf "%s\n" "You encounter the Xenomorph!" ;
-        game_state :=
-          { !game_state with
-            xeno_room=
-              ( match
-                  List.find_index
-                    (fun r -> r.name = target_room.name)
-                    !game_state.map.rooms
-                with
-              | None ->
-                  _log Log_Error
-                    "Couldn't place xenomorph in motion tracker room" ;
-                  !game_state.xeno_room
-              | Some x ->
-                  x ) } ) ;
+        set_xeno_room target_room ) ;
     event
   ) else
     NoEvent

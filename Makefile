@@ -35,12 +35,6 @@ testf: fmt
 run: build
 	$(OPAM_EXEC) $(DUNE) exec -- AFTN $(ARGS)
 
-clientrun: build
-	$(OPAM_EXEC) $(DUNE) exec -- AFTN.client $(ARGS)
-
-serverrun: build
-	$(OPAM_EXEC) $(DUNE) exec -- AFTN.server $(ARGS)
-
 debug: build
 	$(OPAM_EXEC) ocamldebug _build/default/AFTN/main.bc
 

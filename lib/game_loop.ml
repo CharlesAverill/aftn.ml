@@ -35,33 +35,17 @@ let lose_game ?(game_over : bool = true) (message : string) =
 let setup_game (n_characters : int) (use_ash : bool) : unit =
   (* Set random seed *)
   Random.self_init () ;
-  game_state :=
-    { !game_state with
-      morale=
-        ( if n_characters > 3 then
-            20
-          else
-            15
-          (* Set up initial morale *) )
-    ; xeno_room=
-        ( match
-            List.find_index
-              (fun x -> x.name = !game_state.map.xeno_start_room.name)
-              !game_state.map.rooms
-          with
-        | None ->
-            -1
-        | Some x ->
-            x )
-        (* Place xenomorph *)
-    ; ash_room=
-        ( if use_ash then
-            List.find_index
-              (fun x -> x.name = !game_state.map.ash_start_room.name)
-              !game_state.map.rooms
-          else
-            None
-          (* Place Ash*) ) } ;
+  (* Set up initial morale *)
+  set_morale
+    ( if n_characters > 3 then
+        20
+      else
+        15 ) ;
+  (* Place xenomorph *)
+  set_xeno_room !game_state.map.xeno_start_room ;
+  (* Place Ash *)
+  if use_ash then set_ash_room !game_state.map.ash_start_room ;
+  (* Place scrap, events, and coolant *)
   List.iter
     (fun r ->
       let num_scrap = ref (!game_state.num_scrap r) in
@@ -77,6 +61,7 @@ let setup_game (n_characters : int) (use_ash : bool) : unit =
       set_room_has_event r !has_event ;
       if !has_coolant then add_room_item r CoolantCanister )
     !game_state.map.rooms ;
+  (* Select characters *)
   if n_characters = 5 then (
     add_character ripley !game_state.map.player_start_room ;
     add_character dallas !game_state.map.player_start_room ;
@@ -118,10 +103,8 @@ let setup_game (n_characters : int) (use_ash : bool) : unit =
     List.iteri
       (fun i c -> Printf.printf "\t%d) %s\n" (i + 1) c.last_name)
       !game_state.characters ;
-    game_state :=
-      { !game_state with
-        objectives=
-          get_objectives (n_characters + 1) (* Get random objectives *) } ;
+    (* Get random objectives *)
+    List.iter (fun o -> add_objective o) (get_objectives (n_characters + 1)) ;
     shuffle_encounters ()
 
 let complete_objective o =
@@ -146,8 +129,8 @@ let setup_final_mission (active_character : character) : unit =
               "Coolant has been discovered in EQUIPMENT STORAGE!" ;
             (* Spawn Ash *)
             set_ash_room (find_room !game_state.map "MU-TH-UR") ;
-            game_state :=
-              {!game_state with ash_health= health; ash_killed= false} ;
+            set_ash_health health ;
+            set_ash_killed false ;
             Printf.printf "%s\n" "Ash has been located in MU-TH-UR!"
         | DropItemsAndAssemble _ ->
             (* Fill equipment storage with coolant *)
@@ -171,20 +154,14 @@ let setup_final_mission (active_character : character) : unit =
               "Coolant has been discovered in EQUIPMENT STORAGE!" ;
             Printf.printf "%s has the self-destruct counter!\n"
               active_character.last_name ;
-            game_state :=
-              { !game_state with
-                self_destruct_count= Some counter
-              ; self_destruct_character= Some active_character }
+            start_self_destruct counter active_character
         | SelfDestructClear counter ->
             List.iter
               (fun r -> set_room_has_event r true)
               (List.filter (fun r -> r.is_corridor) !game_state.map.rooms) ;
             Printf.printf "%s has the self-destruct counter!\n"
               active_character.last_name ;
-            game_state :=
-              { !game_state with
-                self_destruct_count= Some counter
-              ; self_destruct_character= Some active_character } ) ;
+            start_self_destruct counter active_character ) ;
       Printf.printf "%s\n"
         (string_of_final_mission final_mission
            (List.length !game_state.characters)
@@ -301,7 +278,7 @@ let update_objectives (active_character : character) : unit =
       while List.length !game_state.characters < !x.min_chars do
         x := select_random final_mission_stack
       done ;
-      game_state := {!game_state with final_mission= Some !x} ;
+      set_final_mission !x ;
       setup_final_mission active_character
     )
   ) else
@@ -376,7 +353,7 @@ let reduce_morale (n : int) (saw_xeno : bool) : unit =
     ) else
       0
   in
-  game_state := {!game_state with morale= !game_state.morale - (n - discount)} ;
+  set_morale (!game_state.morale - (n - discount)) ;
   if !game_state.morale <= 0 then lose_game "Morale dropped to 0" ;
   Printf.printf "=====Morale drops by %d, morale is now %d=====\n"
     (n - discount) !game_state.morale
@@ -477,7 +454,7 @@ let check_ash_health () : unit =
     match fm.kind with
     | HurtAsh (_, _, hurt_xeno) when not !game_state.ash_killed ->
         if !game_state.ash_health = 0 then (
-          game_state := {!game_state with ash_killed= true} ;
+          set_ash_killed true ;
           if hurt_xeno then
             Printf.printf
               "[FINAL OBJECTIVE] - You've defeated Ash! Use %s %s on the \
@@ -578,8 +555,7 @@ let rec ash_move (num_spaces : int) : unit =
                 (article_of_item CoolantCanister)
                 (string_of_item CoolantCanister) ;
               remove_character_item c CoolantCanister ;
-              game_state :=
-                {!game_state with ash_health= !game_state.ash_health - 1} ;
+              set_ash_health (!game_state.ash_health - 1) ;
               if !game_state.ash_health > 0 then
                 (* Move Ash away *)
                 let ash_locations =
@@ -1415,8 +1391,7 @@ let game_loop () : unit =
     (* Character turns *)
     List.iteri
       (fun i active_character ->
-        game_state :=
-          {!game_state with turn_idx= i; active_character= Some active_character} ;
+        set_turn i active_character ;
         Printf.printf "-----Turn %d-----\n" (1 + !game_state.turn_idx) ;
         match !game_state.self_destruct_count with
         | Some x
@@ -1425,7 +1400,7 @@ let game_loop () : unit =
                    false
                | Some c ->
                    ch_eq c active_character ->
-            game_state := {!game_state with self_destruct_count= Some (x - 1)} ;
+            set_self_destruct_counter (x - 1) ;
             Printf.printf
               "[SELF-DESTRUCT] The Self-Destruct timer drops to %d!\n" (x - 1) ;
             if x - 1 <= 0 then
@@ -1554,5 +1529,5 @@ let game_loop () : unit =
             if !do_encounter then trigger_encounter active_character )
       !game_state.characters ;
     _log Log_Debug ("Xenomorph location: " ^ (get_xeno_room ()).name) ;
-    game_state := {!game_state with round_count= !game_state.round_count + 1}
+    incr_round ()
   done

@@ -304,7 +304,16 @@ let set_ash_room (r : room) : unit =
         | Some r ->
             Some r ) }
 
+let set_ash_health (n : int) : unit =
+  game_state := {!game_state with ash_health= n}
+
+let set_ash_killed (b : bool) : unit =
+  game_state := {!game_state with ash_killed= b}
+
 (* Objectives state *)
+
+let add_objective (o : objective) : unit =
+  game_state := {!game_state with objectives= o :: !game_state.objectives}
 
 let clear_objective (o : objective) : unit =
   game_state :=
@@ -321,3 +330,25 @@ let clear_objective (o : objective) : unit =
                else
                  (false, a @ [o']) )
              (false, []) !game_state.objectives ) }
+
+let catch_jonesy () : unit = game_state := {!game_state with jonesy_caught= true}
+
+let set_morale (n : int) : unit = game_state := {!game_state with morale= n}
+
+let start_self_destruct (counter : int) (c : character) : unit =
+  game_state :=
+    { !game_state with
+      self_destruct_count= Some counter
+    ; self_destruct_character= Some c }
+
+let set_final_mission (fm : final_mission) : unit =
+  game_state := {!game_state with final_mission= Some fm}
+
+let set_turn (idx : int) (c : character) : unit =
+  game_state := {!game_state with turn_idx= idx; active_character= Some c}
+
+let set_self_destruct_counter (n : int) : unit =
+  game_state := {!game_state with self_destruct_count= Some n}
+
+let incr_round () : unit =
+  game_state := {!game_state with round_count= !game_state.round_count + 1}

@@ -1,6 +1,5 @@
 {0 ALIEN: Fate of The Nostromo}
 
-
 This is a terminal-based clone of the {{:https://boardgamegeek.com/boardgame/332321/alien-fate-nostromo}"ALIEN: Fate of The Nostromo" board game}, 
 implemented in OCaml (see my original {{:https://github.com/CharlesAverill/aftn}C implementation}).
 

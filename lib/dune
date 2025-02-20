@@ -3,21 +3,24 @@
 (library
  (name AFTN)
  (public_name AFTN)
- (libraries unix)
+ (libraries unix threads)
  (modules
-  utils
-  selection
-  map
   character
   encounter
-  objective
-  item
-  game_state
+  events
   game_loop
+  game_state
+  item
+  logging
+  map
+  objective
+  selection
+  utils
   ripley
   dallas
   lambert
   parker
   brett
-  events
-  logging))
+  common
+  client
+  server))
