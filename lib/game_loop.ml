@@ -1365,8 +1365,8 @@ let use_ability (c : character) : bool * bool =
       Printf.printf "%s's ability cannot be used right now.\n" c.last_name ;
       (false, false)
 
-(** Main game loop *)
-let game_loop () : unit =
+(** Main game entry point *)
+let game_start () : unit =
   Printf.printf "%s\n"
     "|==============================================|\n\
      |==============SITUATION CRITICAL==============|\n\
@@ -1385,149 +1385,149 @@ let game_loop () : unit =
   see_objectives () ;
   Printf.printf "%s\n" "Press enter to continue" ;
   let _ = read_line () in
+  ()
+
+let turn (i : int) (active_character : character) =
+  set_turn i active_character ;
+  Printf.printf "-----Turn %d-----\n" (1 + !game_state.turn_idx) ;
+  ( match !game_state.self_destruct_count with
+  | Some x
+    when match !game_state.self_destruct_character with
+         | None ->
+             false
+         | Some c ->
+             ch_eq c active_character ->
+      set_self_destruct_counter (x - 1) ;
+      Printf.printf "[SELF-DESTRUCT] The Self-Destruct timer drops to %d!\n"
+        (x - 1) ;
+      if x - 1 <= 0 then
+        lose_game "The Nostromo self-destructed with the Crew still on it"
+  | _ ->
+      () ) ;
+  let end_turn = ref false in
+  let do_encounter = ref true in
+  let can_use_ability = ref true in
+  for action_count = active_character.max_actions downto 1 do
+    let action_successful = ref true in
+    let first_try = ref true in
+    while (not !end_turn) && (!first_try || not !action_successful) do
+      first_try := false ;
+      Printf.printf "%s's actions: %d/%d\n" active_character.last_name
+        action_count active_character.max_actions ;
+      match
+        get_int_selection
+          ~keys:
+            ( if List.length !game_state.characters > 1 then
+                action_select_chars
+              else
+                single_player_action_select_chars )
+          "Choose an action:"
+          (List.map string_of_action
+             ( if List.length !game_state.characters > 1 then
+                 actions
+               else
+                 single_player_actions ) )
+          false
+      with
+      | Some x -> (
+        match
+          List.nth
+            ( if List.length !game_state.characters > 1 then
+                actions
+              else
+                single_player_actions )
+            x
+        with
+        | Move -> (
+          match character_move active_character [] true with
+          | None ->
+              Printf.printf "%s\n" "Canceled move" ;
+              action_successful := false
+          | Some _ ->
+              action_successful := true ;
+              (* Trigger events in new location *)
+              ( match trigger_event active_character None with
+              | XenoEvent ->
+                  flee active_character ;
+                  end_turn := true ;
+                  do_encounter := false
+              | _ ->
+                  () ) ;
+              (* Check if player moved into xeno room and trigger fleeing *)
+              if xeno_move 0 2 then (
+                end_turn := true ;
+                do_encounter := false
+              ) ;
+              ash_move 0 ;
+              update_objectives active_character ;
+              update_final_mission () )
+        | PickUp ->
+            action_successful := pickup active_character ;
+            if not !action_successful then
+              Printf.printf "%s\n" "Canceled pick up"
+        | Drop ->
+            action_successful := drop active_character
+        | Ability ->
+            let used_ability, can_use_again = use_ability active_character in
+            action_successful := used_ability ;
+            can_use_ability := !can_use_ability && can_use_again
+        | ViewInventory ->
+            view_inventory active_character ;
+            action_successful := false
+        | ViewTeam ->
+            view_team () ;
+            action_successful := false
+        | Craft ->
+            action_successful := craft active_character
+        | UseItem ->
+            action_successful := use active_character
+        | TradeItem ->
+            action_successful := trade_item active_character ;
+            if not !action_successful then Printf.printf "%s\n" "Trade canceled"
+        | EndTurn ->
+            if
+              confirm
+                (Some
+                   (Printf.sprintf
+                      "Are you sure you want to end %s's turn early? (y/n)"
+                      active_character.last_name ) )
+            then
+              end_turn := true
+            else
+              action_successful := false
+        | ViewRoom ->
+            view_room active_character ;
+            action_successful := false
+        | SeeObjectives ->
+            see_objectives () ;
+            action_successful := false
+        | DrawMap ->
+            ( match !game_state.map.ascii_map with
+            | None ->
+                Printf.printf "%s\n" "No ASCII map to print"
+            | Some s ->
+                Printf.printf "%s\n" s ) ;
+            action_successful := false
+        | Exit ->
+            if confirm (Some "Are you sure you want to exit the game? (y/n) ")
+            then
+              lose_game ~game_over:false ""
+            else
+              action_successful := false )
+      | None ->
+          unreachable ()
+    done
+  done ;
+  if !do_encounter then trigger_encounter active_character
+
+(** Main game loop *)
+let game_loop () : unit =
+  game_start () ;
   let broken = ref false in
   while not !broken do
     Printf.printf "=====Round %d=====\n" !game_state.round_count ;
     (* Character turns *)
-    List.iteri
-      (fun i active_character ->
-        set_turn i active_character ;
-        Printf.printf "-----Turn %d-----\n" (1 + !game_state.turn_idx) ;
-        match !game_state.self_destruct_count with
-        | Some x
-          when match !game_state.self_destruct_character with
-               | None ->
-                   false
-               | Some c ->
-                   ch_eq c active_character ->
-            set_self_destruct_counter (x - 1) ;
-            Printf.printf
-              "[SELF-DESTRUCT] The Self-Destruct timer drops to %d!\n" (x - 1) ;
-            if x - 1 <= 0 then
-              lose_game "The Nostromo self-destructed with the Crew still on it"
-        | _ ->
-            let end_turn = ref false in
-            let do_encounter = ref true in
-            let can_use_ability = ref true in
-            for action_count = active_character.max_actions downto 1 do
-              let action_successful = ref true in
-              let first_try = ref true in
-              while (not !end_turn) && (!first_try || not !action_successful) do
-                first_try := false ;
-                Printf.printf "%s's actions: %d/%d\n" active_character.last_name
-                  action_count active_character.max_actions ;
-                match
-                  get_int_selection
-                    ~keys:
-                      ( if List.length !game_state.characters > 1 then
-                          action_select_chars
-                        else
-                          single_player_action_select_chars )
-                    "Choose an action:"
-                    (List.map string_of_action
-                       ( if List.length !game_state.characters > 1 then
-                           actions
-                         else
-                           single_player_actions ) )
-                    false
-                with
-                | Some x -> (
-                  match
-                    List.nth
-                      ( if List.length !game_state.characters > 1 then
-                          actions
-                        else
-                          single_player_actions )
-                      x
-                  with
-                  | Move -> (
-                    match character_move active_character [] true with
-                    | None ->
-                        Printf.printf "%s\n" "Canceled move" ;
-                        action_successful := false
-                    | Some _ ->
-                        action_successful := true ;
-                        (* Trigger events in new location *)
-                        ( match trigger_event active_character None with
-                        | XenoEvent ->
-                            flee active_character ;
-                            end_turn := true ;
-                            do_encounter := false
-                        | _ ->
-                            () ) ;
-                        (* Check if player moved into xeno room and trigger fleeing *)
-                        if xeno_move 0 2 then (
-                          end_turn := true ;
-                          do_encounter := false
-                        ) ;
-                        ash_move 0 ;
-                        update_objectives active_character ;
-                        update_final_mission () )
-                  | PickUp ->
-                      action_successful := pickup active_character ;
-                      if not !action_successful then
-                        Printf.printf "%s\n" "Canceled pick up"
-                  | Drop ->
-                      action_successful := drop active_character
-                  | Ability ->
-                      let used_ability, can_use_again =
-                        use_ability active_character
-                      in
-                      action_successful := used_ability ;
-                      can_use_ability := !can_use_ability && can_use_again
-                  | ViewInventory ->
-                      view_inventory active_character ;
-                      action_successful := false
-                  | ViewTeam ->
-                      view_team () ;
-                      action_successful := false
-                  | Craft ->
-                      action_successful := craft active_character
-                  | UseItem ->
-                      action_successful := use active_character
-                  | TradeItem ->
-                      action_successful := trade_item active_character ;
-                      if not !action_successful then
-                        Printf.printf "%s\n" "Trade canceled"
-                  | EndTurn ->
-                      if
-                        confirm
-                          (Some
-                             (Printf.sprintf
-                                "Are you sure you want to end %s's turn early? \
-                                 (y/n)"
-                                active_character.last_name ) )
-                      then
-                        end_turn := true
-                      else
-                        action_successful := false
-                  | ViewRoom ->
-                      view_room active_character ;
-                      action_successful := false
-                  | SeeObjectives ->
-                      see_objectives () ;
-                      action_successful := false
-                  | DrawMap ->
-                      ( match !game_state.map.ascii_map with
-                      | None ->
-                          Printf.printf "%s\n" "No ASCII map to print"
-                      | Some s ->
-                          Printf.printf "%s\n" s ) ;
-                      action_successful := false
-                  | Exit ->
-                      if
-                        confirm
-                          (Some "Are you sure you want to exit the game? (y/n) ")
-                      then
-                        lose_game ~game_over:false ""
-                      else
-                        action_successful := false )
-                | None ->
-                    unreachable ()
-              done
-            done ;
-            if !do_encounter then trigger_encounter active_character )
-      !game_state.characters ;
+    List.iteri turn !game_state.characters ;
     _log Log_Debug ("Xenomorph location: " ^ (get_xeno_room ()).name) ;
     incr_round ()
   done

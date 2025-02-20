@@ -6,7 +6,7 @@ maintainer: ["Charles Averill"]
 authors: ["Charles Averill"]
 license: "LICENSE"
 homepage: "https://github.com/CharlesAverill/AFTN"
-doc: "https://github.com/CharlesAverill/AFTN"
+doc: "https://charlesaverill.github.io/aftn.ml"
 bug-reports: "https://github.com/CharlesAverill/AFTN/issues"
 depends: [
   "ocaml"
@@ -15,6 +15,7 @@ depends: [
   "ocamlformat"
   "odoc"
   "dune-site"
+  "ocplib-endian"
 ]
 build: [
   ["dune" "subst"] {dev}
