@@ -1,22 +1,24 @@
 {0 ALIEN: Fate of The Nostromo}
 
 
-This is a terminal-based clone of the ["ALIEN: Fate of The Nostromo" board game](https://boardgamegeek.com/boardgame/332321/alien-fate-nostromo), 
-implemented in OCaml (see my original [C implementation](https://github.com/CharlesAverill/aftn)).
+This is a terminal-based clone of the {{:https://boardgamegeek.com/boardgame/332321/alien-fate-nostromo}"ALIEN: Fate of The Nostromo" board game}, 
+implemented in OCaml (see my original {{:https://github.com/CharlesAverill/aftn}C implementation}).
 
 Code documentation: {:./module/index.html}
 
 Build date: AFTN_BUILD_DATE
 
-## Installation
+{1 Installation}
 
-### Full Install
-```sh
-dune install
-```
+{2 Full Install}
 
-## Usage
-```sh
+{@sh[
+  dune install
+]}
+
+{1 Usage}
+
+{@sh[
 Usage: AFTN [OPTION...]
   --characters Number of characters to play with
   --use-ash Include Ash for a more challenging game
@@ -24,7 +26,7 @@ Usage: AFTN [OPTION...]
   --print-map Prints the game map and exits
   --locate-game-data Print location of game data
   --help  Display this list of options
-```
+]}
 
-Check [game_data/maps/format.txt](https://github.com/CharlesAverill/aftn.ml/tree/main/game_data/maps/format.txt) 
+Check {{:https://github.com/CharlesAverill/aftn.ml/tree/main/game_data/maps/format.txt}[game_data/maps/format.txt]} 
 to create your own game boards
