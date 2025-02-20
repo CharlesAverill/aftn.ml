@@ -48,7 +48,7 @@ let parse_arguments (game_data_path : string) : arguments =
     ; ( "--locate-game-data"
       , Arg.Unit
           (fun _ ->
-            print_endline game_data_path ;
+            Printf.printf "%s\n" game_data_path ;
             exit 0 )
       , "Print location of game data" ) ]
   in

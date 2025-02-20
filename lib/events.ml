@@ -66,25 +66,25 @@ let trigger_event (active_character : character)
     | NoEvent ->
         ()
     | SafeEvent ->
-        print_endline
+        Printf.printf "%s\n"
           ( if uses_motion_tracker then
               "All seems quiet..."
             else
               "[EVENT] - Safe" )
     | JonesyEvent when jonesy_caught ->
-        print_endline
+        Printf.printf "%s\n"
           ( if uses_motion_tracker then
               "All seems quiet..."
             else
               "[EVENT] - Safe" )
     | JonesyEvent ->
-        print_endline
+        Printf.printf "%s\n"
           ( if uses_motion_tracker then
               "Something tiny makes a blip. Probably Jonesy"
             else
               "[EVENT] - Safe" )
     | XenoEvent when uses_motion_tracker ->
-        print_endline "Something huge and fast. The Xenomorph?" ;
+        Printf.printf "%s\n" "Something huge and fast. The Xenomorph?" ;
         game_state :=
           { !game_state with
             xeno_room=
@@ -100,8 +100,8 @@ let trigger_event (active_character : character)
               | Some x ->
                   x ) }
     | XenoEvent ->
-        print_endline "[EVENT] - Surprise attack!" ;
-        print_endline "You encounter the Xenomorph!" ;
+        Printf.printf "%s\n" "[EVENT] - Surprise attack!" ;
+        Printf.printf "%s\n" "You encounter the Xenomorph!" ;
         game_state :=
           { !game_state with
             xeno_room=

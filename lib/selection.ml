@@ -39,7 +39,7 @@ let rec get_int_selection ?(keys : char list = [])
          "get_int_selection ?keys must be same length as options, got %d and %d"
          (List.length keys) (List.length options) )
   else (
-    print_endline prompt ;
+    Printf.printf "%s\n" prompt ;
     let options =
       if allow_back then
         options @ [back_string]
@@ -84,7 +84,7 @@ let rec get_int_selection ?(keys : char list = [])
                     String.make 1 (List.nth keys idx) )
                 max_len (List.nth options idx)
           done ;
-          print_endline ""
+          Printf.printf "%s\n" ""
         done ) ;
     let choice = ref "" in
     while String.trim !choice = "" do
@@ -100,7 +100,7 @@ let rec get_int_selection ?(keys : char list = [])
         if x - 1 < List.length options then
           Some (x - 1)
         else (
-          print_endline ("Invalid selection \"" ^ !choice ^ "\"") ;
+          Printf.printf "%s\n" ("Invalid selection \"" ^ !choice ^ "\"") ;
           get_int_selection prompt ~keys ~back_string
             (List.filter (fun s -> s != back_string) options)
             allow_back
@@ -125,14 +125,14 @@ let rec get_int_selection ?(keys : char list = [])
           | None when keys != [] -> (
             match List.find_opt (fun s -> !choice = String.make 1 s) keys with
             | None ->
-                print_endline ("Invalid selection \"" ^ !choice ^ "\"") ;
+                Printf.printf "%s\n" ("Invalid selection \"" ^ !choice ^ "\"") ;
                 get_int_selection ~keys ~back_string prompt
                   (List.filter (fun s -> s != back_string) options)
                   allow_back
             | Some x ->
                 List.find_index (fun s -> s = x) keys )
           | None ->
-              print_endline ("Invalid selection \"" ^ !choice ^ "\"") ;
+              Printf.printf "%s\n" ("Invalid selection \"" ^ !choice ^ "\"") ;
               get_int_selection ~keys ~back_string prompt
                 (List.filter (fun s -> s != back_string) options)
                 allow_back
@@ -142,7 +142,8 @@ let rec get_int_selection ?(keys : char list = [])
 
 (** A yes-or-no confirmation with a customizable prompt *)
 let rec confirm (prompt : string option) : bool =
-  print_endline (match prompt with None -> "Confirm? (y/n)" | Some s -> s) ;
+  Printf.printf "%s\n"
+    (match prompt with None -> "Confirm? (y/n)" | Some s -> s) ;
   let choice = ref "" in
   while String.trim !choice = "" do
     choice := String.lowercase_ascii (Bytes.to_string (read_n_chars 1))

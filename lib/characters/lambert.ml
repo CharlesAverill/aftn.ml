@@ -7,7 +7,7 @@ open Encounter
 let lambert_ability (_ : map) (_ : character) (_ : character list) :
     ability_output =
   if List.length !game_state.encounters < 1 then (
-    print_endline "No encounters to draw" ;
+    Printf.printf "%s\n" "No encounters to draw" ;
     {default_ability_output with used_action= false}
   ) else if confirm (Some "Confirm the use of this ability? (y/n)") then (
     let encounter =

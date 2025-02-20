@@ -16,13 +16,13 @@ let () =
   (* Load map *)
   set_map args.map_path ;
   if args.print_map then
-    print_endline (map_file_of_map !game_state.map)
+    Printf.printf "%s\n" (map_file_of_map !game_state.map)
   else (
     (* Print banner *)
-    print_endline
+    Printf.printf "%s\n"
       (String.concat "\n"
          (read_file_lines (concat game_data_path "banner.txt")) ) ;
-    print_endline "Press enter to continue" ;
+    Printf.printf "%s\n" "Press enter to continue" ;
     let _ = read_line () in
     setup_game args.n_characters args.use_ash ;
     game_loop ()

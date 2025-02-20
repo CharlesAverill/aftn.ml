@@ -17,8 +17,8 @@ open Encounter
 open Utils
 
 let win_game () =
-  print_endline "!!!!![GAME COMPLETE] - Congratulations!" ;
-  print_endline "Your score will be recorded" ;
+  Printf.printf "%s\n" "!!!!![GAME COMPLETE] - Congratulations!" ;
+  Printf.printf "%s\n" "Your score will be recorded" ;
   reset_terminal () ;
   (* TODO : implement *)
   exit 0
@@ -93,7 +93,7 @@ let setup_game (n_characters : int) (use_ash : bool) : unit =
           "" ) ;
     while !selected < n_characters do
       if !selected > 0 then
-        print_endline
+        Printf.printf "%s\n"
           ( "Selected characters: "
           ^ String.concat ", "
               (List.map (fun c -> c.last_name) !game_state.characters) ) ;
@@ -114,7 +114,7 @@ let setup_game (n_characters : int) (use_ash : bool) : unit =
               (fun c -> ch_neq c (List.nth !char_options n))
               !char_options
     done ;
-    print_endline "Characters:" ;
+    Printf.printf "%s\n" "Characters:" ;
     List.iteri
       (fun i c -> Printf.printf "\t%d) %s\n" (i + 1) c.last_name)
       !game_state.characters ;
@@ -133,7 +133,7 @@ let setup_final_mission (active_character : character) : unit =
   | None ->
       unreachable ()
   | Some final_mission ->
-      ( print_endline "=====FINAL MISSION - YOU HAVE A NEW OBJECTIVE=====" ;
+      ( Printf.printf "%s\n" "=====FINAL MISSION - YOU HAVE A NEW OBJECTIVE=====" ;
         match final_mission.kind with
         | HurtAsh (health, _, _) ->
             (* Fill equipment storage with coolant *)
@@ -142,12 +142,13 @@ let setup_final_mission (active_character : character) : unit =
                 (find_room !game_state.map "EQUIPMENT STORAGE")
                 CoolantCanister
             done ;
-            print_endline "Coolant has been discovered in EQUIPMENT STORAGE!" ;
+            Printf.printf "%s\n"
+              "Coolant has been discovered in EQUIPMENT STORAGE!" ;
             (* Spawn Ash *)
             set_ash_room (find_room !game_state.map "MU-TH-UR") ;
             game_state :=
               {!game_state with ash_health= health; ash_killed= false} ;
-            print_endline "Ash has been located in MU-TH-UR!"
+            Printf.printf "%s\n" "Ash has been located in MU-TH-UR!"
         | DropItemsAndAssemble _ ->
             (* Fill equipment storage with coolant *)
             for _ = 1 to List.length !game_state.characters + 2 do
@@ -155,7 +156,8 @@ let setup_final_mission (active_character : character) : unit =
                 (find_room !game_state.map "EQUIPMENT STORAGE")
                 CoolantCanister
             done ;
-            print_endline "Coolant has been discovered in EQUIPMENT STORAGE!"
+            Printf.printf "%s\n"
+              "Coolant has been discovered in EQUIPMENT STORAGE!"
         | AlienCrewLocationsEncounter _ ->
             replace_all_encounters () ; shuffle_encounters ()
         | SelfDestructAssemble (counter, _, _, _) ->
@@ -165,7 +167,8 @@ let setup_final_mission (active_character : character) : unit =
                 (find_room !game_state.map "EQUIPMENT STORAGE")
                 CoolantCanister
             done ;
-            print_endline "Coolant has been discovered in EQUIPMENT STORAGE!" ;
+            Printf.printf "%s\n"
+              "Coolant has been discovered in EQUIPMENT STORAGE!" ;
             Printf.printf "%s has the self-destruct counter!\n"
               active_character.last_name ;
             game_state :=
@@ -182,7 +185,7 @@ let setup_final_mission (active_character : character) : unit =
               { !game_state with
                 self_destruct_count= Some counter
               ; self_destruct_character= Some active_character } ) ;
-      print_endline
+      Printf.printf "%s\n"
         (string_of_final_mission final_mission
            (List.length !game_state.characters)
            (match !game_state.self_destruct_count with None -> 0 | Some x -> x)
@@ -293,7 +296,7 @@ let update_objectives (active_character : character) : unit =
     !game_state.objectives ;
   if !game_state.final_mission = None then (
     if !game_state.objectives = [] then (
-      print_endline "=====COMPLETED ALL OBJECTIVES=====" ;
+      Printf.printf "%s\n" "=====COMPLETED ALL OBJECTIVES=====" ;
       let x = ref (select_random final_mission_stack) in
       while List.length !game_state.characters < !x.min_chars do
         x := select_random final_mission_stack
@@ -306,24 +309,24 @@ let update_objectives (active_character : character) : unit =
 
 let see_objectives () : unit =
   if List.length !game_state.objectives > 0 then (
-    print_endline "=====OBJECTIVES=====" ;
+    Printf.printf "%s\n" "=====OBJECTIVES=====" ;
     List.iter
-      (fun o -> print_endline (string_of_objective o))
+      (fun o -> Printf.printf "%s\n" (string_of_objective o))
       !game_state.objectives
   ) ;
   if List.length !game_state.cleared_objectives > 0 then (
-    print_endline "=====CLEARED OBJECTIVES=====" ;
+    Printf.printf "%s\n" "=====CLEARED OBJECTIVES=====" ;
     List.iter
-      (fun o -> print_endline (string_of_objective o))
+      (fun o -> Printf.printf "%s\n" (string_of_objective o))
       !game_state.cleared_objectives
   ) ;
   if !game_state.final_mission != None then (
-    print_endline "=====FINAL MISSION=====" ;
+    Printf.printf "%s\n" "=====FINAL MISSION=====" ;
     match !game_state.final_mission with
     | None ->
         unreachable ()
     | Some fm ->
-        print_endline
+        Printf.printf "%s\n"
           (string_of_final_mission fm
              (List.length !game_state.characters)
              ( match !game_state.self_destruct_count with
@@ -698,7 +701,7 @@ let pickup (active_character : character) : bool =
     !game_state.num_scrap current_room = 0
     && !game_state.room_items current_room = []
   then (
-    print_endline "This room has no scrap or items to pick up" ;
+    Printf.printf "%s\n" "This room has no scrap or items to pick up" ;
     false
   ) else if
       List.length
@@ -707,7 +710,8 @@ let pickup (active_character : character) : bool =
            (!game_state.character_items active_character) )
       >= 3
     then (
-    print_endline (active_character.last_name ^ " cannot carry another item") ;
+    Printf.printf "%s\n"
+      (active_character.last_name ^ " cannot carry another item") ;
     false
   ) else
     let pick_up_options =
@@ -738,10 +742,10 @@ let pickup (active_character : character) : bool =
           else
             match int_of_string_opt input with
             | None ->
-                print_endline "Invalid scrap choice"
+                Printf.printf "%s\n" "Invalid scrap choice"
             | Some x ->
                 if x > !game_state.num_scrap current_room then
-                  print_endline "Invalid scrap choice"
+                  Printf.printf "%s\n" "Invalid scrap choice"
                 else
                   delta_scrap := x
         done ;
@@ -770,7 +774,7 @@ let pickup (active_character : character) : bool =
                  (fun x -> x = CoolantCanister)
                  (!game_state.character_items active_character)
           then (
-            print_endline
+            Printf.printf "%s\n"
               ( active_character.last_name ^ " already carries a "
               ^ string_of_item i ) ;
             false
@@ -783,7 +787,7 @@ let pickup (active_character : character) : bool =
 let drop (active_character : character) : bool =
   let current_room = locate_character active_character in
   if !game_state.character_items active_character = [] then (
-    print_endline (active_character.last_name ^ " has no items to drop") ;
+    Printf.printf "%s\n" (active_character.last_name ^ " has no items to drop") ;
     false
   ) else
     match
@@ -792,7 +796,7 @@ let drop (active_character : character) : bool =
         true
     with
     | None ->
-        print_endline "Canceled drop" ;
+        Printf.printf "%s\n" "Canceled drop" ;
         false
     | Some idx -> (
       match pop_character_item active_character idx with
@@ -807,7 +811,7 @@ let drop (active_character : character) : bool =
                  (fun i -> i = CoolantCanister)
                  (!game_state.room_items current_room)
           then (
-            print_endline
+            Printf.printf "%s\n"
               ( current_room.name ^ " already contains a "
               ^ string_of_item CoolantCanister ) ;
             false
@@ -827,14 +831,14 @@ let view_inventory ?(print_name : bool = false) ?(print_location : bool = true)
   if print_location then
     Printf.printf "Location: %s\n" (locate_character active_character).name ;
   Printf.printf "Scrap: %d\n" (!game_state.character_scraps active_character) ;
-  print_endline "Items:" ;
+  Printf.printf "%s\n" "Items:" ;
   List.iter
-    (fun i -> print_endline ("\t" ^ string_of_item i))
+    (fun i -> Printf.printf "%s\n" ("\t" ^ string_of_item i))
     (!game_state.character_items active_character)
 
 (** Show the team's morale and inventories *)
 let view_team () : unit =
-  print_endline "=======TEAM=======" ;
+  Printf.printf "%s\n" "=======TEAM=======" ;
   Printf.printf "Morale: %d\n" !game_state.morale ;
   List.iter
     (view_inventory ~print_name:true ~print_location:true)
@@ -853,7 +857,7 @@ let craft (active_character : character) : bool =
       cost_of_item
   in
   if !game_state.character_scraps active_character <= 0 then (
-    print_endline
+    Printf.printf "%s\n"
       (active_character.last_name ^ " doesn't have any scrap to craft with") ;
     false
   ) else if
@@ -863,7 +867,8 @@ let craft (active_character : character) : bool =
            (!game_state.character_items active_character) )
       >= 3
     then (
-    print_endline (active_character.last_name ^ " cannot carry another item") ;
+    Printf.printf "%s\n"
+      (active_character.last_name ^ " cannot carry another item") ;
     false
   ) else
     let craftable =
@@ -1027,7 +1032,7 @@ let trade_item (active_character : character) : bool =
       (potential_givers @ potential_receivers)
   in
   if List.length all = 0 then (
-    print_endline "There is nobody to trade with" ;
+    Printf.printf "%s\n" "There is nobody to trade with" ;
     false
   ) else
     match
@@ -1107,7 +1112,7 @@ let use (c : character) : bool =
           find_rooms_within_distance !game_state.map (locate_character c) 2
         with
         | [] ->
-            print_endline "There are no scannable rooms nearby." ;
+            Printf.printf "%s\n" "There are no scannable rooms nearby." ;
             false
         | l -> (
           match
@@ -1132,7 +1137,7 @@ let use (c : character) : bool =
               ( List.length shortest_path_to_xenomorph
               <= 3 + 1 (* +1 because contains source *) )
           then (
-            print_endline "The xenomorph is not close enough!" ;
+            Printf.printf "%s\n" "The xenomorph is not close enough!" ;
             false
           ) else
             let xeno_locations =
@@ -1162,7 +1167,7 @@ let use (c : character) : bool =
               ( List.length shortest_path_to_xenomorph
               <= 3 + 1 (* +1 because contains source *) )
           then (
-            print_endline "The xenomorph is not close enough!" ;
+            Printf.printf "%s\n" "The xenomorph is not close enough!" ;
             false
           ) else (
             remove_character_item c Incinerator ;
@@ -1261,9 +1266,9 @@ let trigger_encounter (active_character : character) : unit =
           Printf.printf "[ENCOUNTER] - All is quiet in %s. The xenomorph lurks."
             target_room.name ;
           if ash_in_play then
-            print_endline " Ash lurks."
+            Printf.printf "%s\n" " Ash lurks."
           else
-            print_endline "" ;
+            Printf.printf "%s\n" "" ;
           (* Place scrap into target_room *)
           ( match Random.int_in_range ~min:1 ~max:11 with
           | x when x <= 8 ->
@@ -1288,36 +1293,36 @@ let trigger_encounter (active_character : character) : unit =
           Printf.printf "[ENCOUNTER] - The xenomorph has returned to the %s."
             !game_state.map.xeno_start_room.name ;
           if ash_in_play then
-            print_endline " Ash lurks."
+            Printf.printf "%s\n" " Ash lurks."
           else
-            print_endline "" ;
+            Printf.printf "%s\n" "" ;
           set_xeno_room !game_state.map.xeno_start_room ;
           let _ = xeno_move 0 2 in
           ash_move 1 ;
           replace_alien_encounters ()
       | Alien_Stalk ->
-          print_string "[ENCOUNTER] - The xenomorph is stalking..." ;
+          Printf.printf "[ENCOUNTER] - The xenomorph is stalking..." ;
           if ash_in_play then
-            print_endline " Ash lurks."
+            Printf.printf "%s\n" " Ash lurks."
           else
-            print_endline "" ;
+            Printf.printf "%s\n" "" ;
           let _ = xeno_move 3 3 in
           ash_move 1
       | Alien_Hunt ->
-          print_string "[ENCOUNTER] - The xenomorph is hunting!" ;
+          Printf.printf "[ENCOUNTER] - The xenomorph is hunting!" ;
           if ash_in_play then
-            print_endline " Ash lurks."
+            Printf.printf "%s\n" " Ash lurks."
           else
-            print_endline "" ;
+            Printf.printf "%s\n" "" ;
           let _ = xeno_move 2 4 in
           ash_move 1
       | Order937_MeetMeInTheInfirmary ->
           Printf.printf "[ENCOUNTER] - %s travels to %s."
             active_character.last_name !game_state.map.ash_start_room.name ;
           if ash_in_play then
-            print_endline " Ash gives chase!"
+            Printf.printf "%s\n" " Ash gives chase!"
           else
-            print_endline "" ;
+            Printf.printf "%s\n" "" ;
           set_character_room active_character !game_state.map.ash_start_room ;
           update_objectives active_character ;
           ash_move 2
@@ -1325,9 +1330,9 @@ let trigger_encounter (active_character : character) : unit =
           Printf.printf "[ENCOUNTER] - %s loses all scrap!"
             active_character.last_name ;
           if ash_in_play then
-            print_endline " Ash gives chase!"
+            Printf.printf "%s\n" " Ash gives chase!"
           else
-            print_endline "" ;
+            Printf.printf "%s\n" "" ;
           replace_order937_encounters () ;
           set_character_scrap active_character 0 ;
           ash_move 2
@@ -1344,9 +1349,9 @@ let trigger_encounter (active_character : character) : unit =
               else
                 "." ) ;
           if ash_in_play then
-            print_endline " Ash gives chase!"
+            Printf.printf "%s\n" " Ash gives chase!"
           else
-            print_endline "" ;
+            Printf.printf "%s\n" "" ;
           List.iter
             (fun c -> set_character_scrap c (max 0 (get_character_scrap c - 1)))
             !game_state.characters ;
@@ -1386,7 +1391,7 @@ let use_ability (c : character) : bool * bool =
 
 (** Main game loop *)
 let game_loop () : unit =
-  print_endline
+  Printf.printf "%s\n"
     "|==============================================|\n\
      |==============SITUATION CRITICAL==============|\n\
      |========REPORT ISSUED BY DALLAS, ARTHUR=======|\n\
@@ -1399,10 +1404,10 @@ let game_loop () : unit =
      |could be waiting just beyond the next hatch...|\n\
      |==============================================|\n\
      |==============================================|\n" ;
-  print_endline "Press enter to continue" ;
+  Printf.printf "%s\n" "Press enter to continue" ;
   let _ = read_line () in
   see_objectives () ;
-  print_endline "Press enter to continue" ;
+  Printf.printf "%s\n" "Press enter to continue" ;
   let _ = read_line () in
   let broken = ref false in
   while not !broken do
@@ -1463,7 +1468,7 @@ let game_loop () : unit =
                   | Move -> (
                     match character_move active_character [] true with
                     | None ->
-                        print_endline "Canceled move" ;
+                        Printf.printf "%s\n" "Canceled move" ;
                         action_successful := false
                     | Some _ ->
                         action_successful := true ;
@@ -1486,7 +1491,7 @@ let game_loop () : unit =
                   | PickUp ->
                       action_successful := pickup active_character ;
                       if not !action_successful then
-                        print_endline "Canceled pick up"
+                        Printf.printf "%s\n" "Canceled pick up"
                   | Drop ->
                       action_successful := drop active_character
                   | Ability ->
@@ -1508,7 +1513,7 @@ let game_loop () : unit =
                   | TradeItem ->
                       action_successful := trade_item active_character ;
                       if not !action_successful then
-                        print_endline "Trade canceled"
+                        Printf.printf "%s\n" "Trade canceled"
                   | EndTurn ->
                       if
                         confirm
@@ -1530,9 +1535,9 @@ let game_loop () : unit =
                   | DrawMap ->
                       ( match !game_state.map.ascii_map with
                       | None ->
-                          print_endline "No ASCII map to print"
+                          Printf.printf "%s\n" "No ASCII map to print"
                       | Some s ->
-                          print_endline s ) ;
+                          Printf.printf "%s\n" s ) ;
                       action_successful := false
                   | Exit ->
                       if
