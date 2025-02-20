@@ -1,6 +1,16 @@
 (executable
  (public_name AFTN)
- (name main)
+ (name local)
+ (libraries AFTN dune-site))
+
+(executable
+ (public_name AFTN.server)
+ (name server)
+ (libraries AFTN dune-site))
+
+(executable
+ (public_name AFTN.client)
+ (name client)
  (libraries AFTN dune-site))
 
 (generate_sites_module

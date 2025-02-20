@@ -1,7 +1,7 @@
 (env
  (dev
   (flags
-   (:standard -w +a-4-42-44-48-50-58-32-60@8-70))))
+   (:standard -w +a-4-42-44-48-50-58-32-60@8-70-33))))
 
 (install
  (section
