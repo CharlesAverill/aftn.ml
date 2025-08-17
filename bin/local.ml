@@ -18,7 +18,8 @@ let game_data_path =
   match Aftn_sites.Sites.game_data with
   | [] ->
       fatal rc_Error "No game data path provided"
-  | h :: _ -> concat h "game_data"
+  | h :: _ ->
+      concat h "game_data"
 
 (* Manual options selection *)
 let select_desktop_options (args : arguments) : arguments =
@@ -58,5 +59,5 @@ let () =
     Printf.printf "%s\n" "Press enter to continue" ;
     let _ = read_line () in
     setup_game args.n_characters args.use_ash ;
-    game_loop ()
+    game_loop game_data_path args.select_options_tui
   )

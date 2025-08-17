@@ -19,7 +19,7 @@ let ripley_ability (_ : map) (_ : character) (chars : character list) :
       let selected_char = List.nth chars x in
       { default_ability_output with
         moved_character_index=
-          List.find_index (fun c -> c = selected_char) !game_state.characters }
+          List.find_index (ch_eq selected_char) !game_state.characters }
 
 let ripley : character =
   { first_name= "Ellen"

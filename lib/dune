@@ -13,6 +13,7 @@
   item
   logging
   map
+  score_stats
   objective
   selection
   utils

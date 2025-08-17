@@ -3,6 +3,7 @@ open Item
 open Character
 open Game_state
 open Selection
+open Score_stats
 
 type event = NoEvent | SafeEvent | JonesyEvent | XenoEvent
 
@@ -41,6 +42,7 @@ let random_event () : event * int =
               (* Jonesy is discovered and the party owns a cat carrier and uses it *)
               let catcher = List.nth carrier_chars idx in
               remove_character_item catcher CatCarrier ;
+              global_stats.cat_carrier_used <- global_stats.cat_carrier_used + 1 ;
               Printf.printf "%s used the %s to catch Jonesy\n" catcher.last_name
                 (string_of_item CatCarrier) ;
               catch_jonesy () ;

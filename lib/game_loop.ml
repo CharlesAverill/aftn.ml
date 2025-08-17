@@ -15,19 +15,48 @@ open Item
 open Events
 open Encounter
 open Utils
+open Score_stats
+
+let game_data_path = ref ""
+
+let pause_on_exit = ref false
 
 let win_game () =
+  let open Filename in
   Printf.printf "%s\n" "!!!!![GAME COMPLETE] - Congratulations!" ;
+  Printf.printf "Your score will be recorded\n" ;
+  Printf.printf "Enter your name: " ;
+  let score =
+    { player= read_line ()
+    ; turns= !game_state.turn_idx + 1
+    ; n_characters= List.length !game_state.characters }
+  in
+  append_score_to_csv (concat !game_data_path "scores.csv") score ;
+  Printf.printf "Your score: %s\n" (score_to_csv score) ;
+  Printf.printf "%s\n" "Top scores:" ;
+  show_top_n_scores (concat !game_data_path "scores.csv") 10 ;
+  print_stats () ;
+  if !pause_on_exit then (
+    Printf.printf "Press [enter] to exit\n" ;
+    ignore (read_line ())
+  ) ;
   reset_terminal () ;
-  (* TODO : implement *)
   exit 0
 
 let lose_game ?(game_over : bool = true) (message : string) =
-  reset_terminal () ;
+  let open Filename in
   if game_over then
     Printf.printf "!!!!![GAME OVER] - %s!!!!!\n" message
   else
     () ;
+  reset_terminal () ;
+  Printf.printf "%s\n" "Top scores:" ;
+  show_top_n_scores (concat !game_data_path "scores.csv") 10 ;
+  print_stats () ;
+  if !pause_on_exit then (
+    Printf.printf "Press [enter] to exit\n" ;
+    ignore (read_line ())
+  ) ;
   exit 0
 
 let max_characters = 5
@@ -94,6 +123,8 @@ let setup_game (n_characters : int) (use_ash : bool) : unit =
         | Some n ->
             add_character (List.nth !char_options n)
               !game_state.map.player_start_room ;
+            visited_rooms := [!game_state.map.player_start_room] ;
+            global_stats.rooms_visited <- 1 ;
             selected := !selected + 1 ;
             char_options :=
               List.filter
@@ -349,6 +380,10 @@ let reduce_morale (n : int) (saw_xeno : bool) : unit =
           0
       | Some idx ->
           let use_character, i, discount = List.nth options idx in
+          if i = Flashlight then
+            global_stats.flashlight_used <- global_stats.flashlight_used + 1
+          else if i = ElectricProd then
+            global_stats.prod_used <- global_stats.prod_used + 1 ;
           remove_character_item use_character i ;
           discount
     ) else
@@ -392,10 +427,16 @@ let character_move (active_character : character) (allowed_moves : room list)
   | None ->
       None
   | Some i ->
+      global_stats.movements <- global_stats.movements + 1 ;
       let r = find_room !game_state.map (List.nth allowed_moves i) in
       Printf.printf "%s moved from %s to %s\n" active_character.last_name
         (locate_character active_character).name r.name ;
       set_character_room active_character r ;
+      (* Check if visited room already *)
+      if not (List.exists (fun x -> x = r) !visited_rooms) then (
+        global_stats.rooms_visited <- global_stats.rooms_visited + 1 ;
+        visited_rooms := r :: !visited_rooms
+      ) ;
       update_objectives active_character ;
       Some r
 
@@ -728,6 +769,8 @@ let pickup (active_character : character) : bool =
         done ;
         Printf.printf "%s picked up %d scrap\n" active_character.last_name
           !delta_scrap ;
+        global_stats.scrap_collected <-
+          global_stats.scrap_collected + !delta_scrap ;
         set_character_scrap active_character
           (!game_state.character_scraps active_character + !delta_scrap) ;
         set_room_scrap current_room
@@ -757,45 +800,94 @@ let pickup (active_character : character) : bool =
             false
           ) else (
             add_character_item active_character i ;
+            global_stats.items_collected <- global_stats.items_collected + 1 ;
             true
           ) )
 
 (** Prompt the user to drop an [item] in the [room] they are located in *)
 let drop (active_character : character) : bool =
   let current_room = locate_character active_character in
-  if !game_state.character_items active_character = [] then (
-    Printf.printf "%s\n" (active_character.last_name ^ " has no items to drop") ;
+  let has_items = !game_state.character_items active_character <> [] in
+  let has_scrap = !game_state.character_scraps active_character > 0 in
+  if (not has_items) && not has_scrap then (
+    Printf.printf "%s\n"
+      (active_character.last_name ^ " has no items or scrap to drop") ;
     false
   ) else
+    let drop_options =
+      ( if has_scrap then
+          [ Printf.sprintf "%d scrap"
+              (!game_state.character_scraps active_character) ]
+        else
+          [] )
+      @ List.map string_of_item (!game_state.character_items active_character)
+    in
     match
-      get_int_selection "Which item to drop?"
-        (List.map string_of_item (!game_state.character_items active_character))
-        true
+      get_int_selection "What would you like to drop?" drop_options true
     with
     | None ->
         Printf.printf "%s\n" "Canceled drop" ;
         false
     | Some idx -> (
-      match pop_character_item active_character idx with
-      | None ->
-          _log Log_Error
-            "pop_character_item returned None when it shouldn't have" ;
-          false
-      | Some i ->
-          if
-            i = CoolantCanister
-            && List.exists
-                 (fun i -> i = CoolantCanister)
-                 (!game_state.room_items current_room)
-          then (
-            Printf.printf "%s\n"
-              ( current_room.name ^ " already contains a "
-              ^ string_of_item CoolantCanister ) ;
+        if has_scrap && idx = 0 then (
+          let to_drop = ref (-1) in
+          let go_back = ref false in
+          while !to_drop < 0 do
+            Printf.printf "How much scrap to drop? Max: %d ('b' to go back) "
+              (!game_state.character_scraps active_character) ;
+            let input = String.lowercase_ascii (String.trim (read_line ())) in
+            match int_of_string_opt input with
+            | None when input = "b" ->
+                go_back := true ;
+                to_drop := 1
+            | None ->
+                ()
+            | Some x when x > !game_state.character_scraps active_character ->
+                ()
+            | Some x ->
+                to_drop := min x (!game_state.character_scraps active_character)
+          done ;
+          if !go_back then
             false
-          ) else (
-            add_room_item current_room i ;
+          else (
+            Printf.printf "%s dropped %d scrap in %s\n"
+              active_character.last_name !to_drop current_room.name ;
+            set_character_scrap active_character
+              (!game_state.character_scraps active_character - !to_drop) ;
+            set_room_scrap current_room
+              (!game_state.num_scrap current_room + !to_drop) ;
+            global_stats.scrap_dropped <- global_stats.scrap_dropped + !to_drop ;
             true
-          ) )
+          )
+        ) else
+          let item_idx =
+            if has_scrap then
+              idx - 1
+            else
+              idx
+          in
+          match pop_character_item active_character item_idx with
+          | None ->
+              _log Log_Error
+                "pop_character_item returned None when it shouldn't have" ;
+              false
+          | Some i ->
+              if
+                i = CoolantCanister
+                && List.exists
+                     (fun i -> i = CoolantCanister)
+                     (!game_state.room_items current_room)
+              then (
+                add_character_item active_character i ;
+                Printf.printf "%s\n"
+                  ( current_room.name ^ " already contains a "
+                  ^ string_of_item CoolantCanister ) ;
+                false
+              ) else (
+                add_room_item current_room i ;
+                global_stats.items_dropped <- global_stats.items_dropped + 1 ;
+                true
+              ) )
 
 (** Show the active character's inventory *)
 let view_inventory ?(print_name : bool = false) ?(print_location : bool = true)
@@ -864,6 +956,7 @@ let craft (active_character : character) : bool =
         let i = List.nth craftable idx in
         Printf.printf "%s crafted %s\n" active_character.last_name
           (string_of_item i) ;
+        global_stats.items_crafted <- global_stats.items_crafted + 1 ;
         add_character_item active_character i ;
         set_character_scrap active_character
           (!game_state.character_scraps active_character - price i) ;
@@ -1102,6 +1195,8 @@ let use (c : character) : bool =
           | Some idx ->
               let room = List.nth l idx in
               remove_character_item c MotionTracker ;
+              global_stats.motion_tracker_used <-
+                global_stats.motion_tracker_used + 1 ;
               let _ = trigger_event c (Some room) in
               true ) )
       | GrappleGun -> (
@@ -1131,6 +1226,7 @@ let use (c : character) : bool =
                 let loc = List.nth xeno_locations idx in
                 remove_character_item c GrappleGun ;
                 Printf.printf "The xenomorph retreats to %s!\n" loc.name ;
+                global_stats.grapplegun_used <- global_stats.grapplegun_used + 1 ;
                 set_xeno_room loc ;
                 let _ = xeno_move 0 2 in
                 true )
@@ -1148,6 +1244,7 @@ let use (c : character) : bool =
             false
           ) else (
             remove_character_item c Incinerator ;
+            global_stats.incinerator_used <- global_stats.incinerator_used + 1 ;
             Printf.printf "The xenomorph retreats to %s!\n"
               !game_state.map.xeno_start_room.name ;
             set_xeno_room !game_state.map.xeno_start_room ;
@@ -1345,6 +1442,7 @@ let use_ability (c : character) : bool * bool =
              (Printf.sprintf "Use %s's ability? (\"%s\")" c.last_name
                 description ) )
       then (
+        global_stats.abilities_used <- global_stats.abilities_used + 1 ;
         let ao = ability !game_state.map c !game_state.characters in
         (* Move characters *)
         ( match ao.moved_character_index with
@@ -1522,7 +1620,9 @@ let turn (i : int) (active_character : character) =
   if !do_encounter then trigger_encounter active_character
 
 (** Main game loop *)
-let game_loop () : unit =
+let game_loop (gdp : string) (select_options_tui : bool) : unit =
+  game_data_path := gdp ;
+  pause_on_exit := select_options_tui ;
   game_start () ;
   let broken = ref false in
   while not !broken do
