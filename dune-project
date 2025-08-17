@@ -11,14 +11,14 @@
 
 (maintainers "Charles Averill")
 
-(license LICENSE)
+(license MIT)
 
 (documentation https://charlesaverill.github.io/aftn.ml)
 
 (package
  (name AFTN)
- (synopsis "")
- (description "Alien: Fate of the Nostromo port")
+ (description "A terminal-based OCaml clone of the 'ALIEN: Fate of The Nostromo' board game")
+ (synopsis "Alien: Fate of the Nostromo port")
  (sites (share game_data))
  (depends ocaml dune alcotest ocamlformat odoc dune-site ocplib-endian))
 

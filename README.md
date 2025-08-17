@@ -5,10 +5,8 @@ implemented in OCaml (see my original [C implementation](https://github.com/Char
 
 ## Installation
 
-```sh
-opam install . --deps-only
-dune install
-```
+The install script [install.sh](./install.sh) installs dependencies, builds the project, then installs [a .desktop file](game_data/AFTN.desktop) to `/usr/share/applications/`, as well as an icon to `/usr/share/icons/`.
+This requires `sudo` permissions.
 
 ## Usage
 ```sh
@@ -18,6 +16,7 @@ Usage: AFTN [OPTION...]
   --map Path to an alternative game board. Run `aftn.ml --map-format` to see details
   --print-map Prints the game map and exits
   --locate-game-data Print location of game data
+  --select-options-tui Select arguments in the TUI rather than via command-line arguments
   --help  Display this list of options
 ```
 

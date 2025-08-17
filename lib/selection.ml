@@ -154,3 +154,23 @@ let rec confirm (prompt : string option) : bool =
     false
   else
     confirm prompt
+
+(** Read an integer from stdin *)
+let rec get_int (prompt : string) : int =
+  Printf.printf "%s " prompt ;
+  match read_int_opt () with Some x -> x | None -> get_int prompt
+
+(** Read a bool from stdin *)
+let rec get_bool (prompt : string) : bool =
+  Printf.printf "%s " prompt ;
+  match String.lowercase_ascii (read_line ()) with
+  | "true" | "1" | "t" ->
+      true
+  | "false" | "0" | "f" ->
+      false
+  | _ ->
+      get_bool prompt
+
+let clear () =
+  print_string "\027[2J\027[H" ;
+  flush Out_channel.stdout

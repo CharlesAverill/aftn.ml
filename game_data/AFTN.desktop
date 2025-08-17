@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AFTN
+Comment=Terminal-based clone of the ALIEN: Fate of the Nostromo board game
+Exec=FILL_IN_EXEC --select-options-tui
+Icon=aftn
+Terminal=true
+Type=Application
+Categories=Game;BoardGame;

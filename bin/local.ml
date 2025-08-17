@@ -3,16 +3,40 @@ open AFTN.Utils
 open AFTN.Map
 open AFTN.Game_state
 open AFTN.Game_loop
+open AFTN.Selection
 open Filename
 open AFTN.Logging
+open Sys
+
+(* SIGINT handler *)
+let handle_sigint _ =
+  _log Log_Debug "Caught SIGINT, Exiting" ;
+  reset_terminal () ;
+  exit 0
 
 let game_data_path = concat (List.nth Aftn_sites.Sites.game_data 0) "game_data"
 
+(* Manual options selection *)
+let select_desktop_options (args : arguments) : arguments =
+  let n_characters = get_int "Number of characters?" in
+  let use_ash = get_bool "Use ash?" in
+  {args with n_characters; use_ash}
+
 let () =
+  (* Handle SIGINT *)
+  Sys.set_signal Sys.sigint (Signal_handle handle_sigint) ;
   (* Handle arguments *)
   let args = Argparse.parse_arguments game_data_path in
   _GLOBAL_LOG_LEVEL := args.log_level ;
   _log Log_Debug ("Game data path: " ^ concat game_data_path "game_data") ;
+  (* If started from desktop, do manual arg selection *)
+  let args =
+    if args.select_options_tui then
+      select_desktop_options args
+    else
+      args
+  in
+  clear () ;
   (* Load map *)
   set_map args.map_path ;
   if args.print_map then
