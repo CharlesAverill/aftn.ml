@@ -164,9 +164,9 @@ let rec get_int (prompt : string) : int =
 let rec get_bool (prompt : string) : bool =
   Printf.printf "%s " prompt ;
   match String.lowercase_ascii (read_line ()) with
-  | "true" | "1" | "t" ->
+  | "true" | "1" | "t" | "yes" | "y" ->
       true
-  | "false" | "0" | "f" ->
+  | "false" | "0" | "f" | "no" | "n" ->
       false
   | _ ->
       get_bool prompt

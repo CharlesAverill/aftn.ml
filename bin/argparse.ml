@@ -1,5 +1,6 @@
 open Filename
 open AFTN.Logging
+open AFTN.Game_loop
 
 type arguments =
   { n_characters: int
@@ -18,7 +19,13 @@ let parse_arguments (game_data_path : string) : arguments =
   let select_options_tui = ref false in
   let speclist =
     [ ( "--characters"
-      , Arg.Set_int n_characters
+      , Arg.Int
+          (fun x ->
+            if not (1 <= x && x <= max_characters) then
+              fatal rc_ArgError
+                (Printf.sprintf "characters must be in [1, %d]" max_characters)
+            else
+              n_characters := x )
       , "Number of characters to play with" )
     ; ("--use-ash", Arg.Set use_ash, "Include Ash for a more challenging game")
     ; ( "--map"

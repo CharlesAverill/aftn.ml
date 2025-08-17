@@ -18,9 +18,14 @@ let game_data_path = concat (List.nth Aftn_sites.Sites.game_data 0) "game_data"
 
 (* Manual options selection *)
 let select_desktop_options (args : arguments) : arguments =
-  let n_characters = get_int "Number of characters?" in
+  Printf.printf "%s\n" "=====GAME OPTIONS=====" ;
+  let n_characters = ref 0 in
+  while not (1 <= !n_characters && !n_characters <= max_characters) do
+    n_characters :=
+      get_int (Printf.sprintf "Number of characters? (max %d)" max_characters)
+  done ;
   let use_ash = get_bool "Use ash?" in
-  {args with n_characters; use_ash}
+  {args with n_characters= !n_characters; use_ash}
 
 let () =
   (* Handle SIGINT *)

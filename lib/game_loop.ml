@@ -31,6 +31,8 @@ let lose_game ?(game_over : bool = true) (message : string) =
     () ;
   exit 0
 
+let max_characters = 5
+
 (** Set up the game state given user preferences *)
 let setup_game (n_characters : int) (use_ash : bool) : unit =
   (* Set random seed *)
@@ -62,50 +64,50 @@ let setup_game (n_characters : int) (use_ash : bool) : unit =
       if !has_coolant then add_room_item r CoolantCanister )
     !game_state.map.rooms ;
   (* Select characters *)
-  if n_characters = 5 then (
-    add_character ripley !game_state.map.player_start_room ;
-    add_character dallas !game_state.map.player_start_room ;
-    add_character parker !game_state.map.player_start_room ;
-    add_character brett !game_state.map.player_start_room ;
-    add_character lambert !game_state.map.player_start_room
-  ) else
-    let char_options = ref [ripley; dallas; parker; brett; lambert] in
-    let selected = ref 0 in
-    Printf.printf "Select %d character%s:\n" n_characters
-      ( if n_characters > 1 then
-          "s"
-        else
-          "" ) ;
-    while !selected < n_characters do
-      if !selected > 0 then
-        Printf.printf "%s\n"
-          ( "Selected characters: "
-          ^ String.concat ", "
-              (List.map (fun c -> c.last_name) !game_state.characters) ) ;
-      match
-        get_int_selection
-          "Which character would you like to add? Select b) to exit"
-          (List.map string_of_character !char_options)
-          true
-      with
-      | None ->
-          lose_game ~game_over:false ""
-      | Some n ->
-          add_character (List.nth !char_options n)
-            !game_state.map.player_start_room ;
-          selected := !selected + 1 ;
-          char_options :=
-            List.filter
-              (fun c -> ch_neq c (List.nth !char_options n))
-              !char_options
-    done ;
-    Printf.printf "%s\n" "Characters:" ;
-    List.iteri
-      (fun i c -> Printf.printf "\t%d) %s\n" (i + 1) c.last_name)
-      !game_state.characters ;
-    (* Get random objectives *)
-    List.iter (fun o -> add_objective o) (get_objectives (n_characters + 1)) ;
-    shuffle_encounters ()
+  ( if n_characters = max_characters then (
+      add_character ripley !game_state.map.player_start_room ;
+      add_character dallas !game_state.map.player_start_room ;
+      add_character parker !game_state.map.player_start_room ;
+      add_character brett !game_state.map.player_start_room ;
+      add_character lambert !game_state.map.player_start_room
+    ) else
+      let char_options = ref [ripley; dallas; parker; brett; lambert] in
+      let selected = ref 0 in
+      Printf.printf "Select %d character%s:\n" n_characters
+        ( if n_characters > 1 then
+            "s"
+          else
+            "" ) ;
+      while !selected < n_characters do
+        if !selected > 0 then
+          Printf.printf "%s\n"
+            ( "Selected characters: "
+            ^ String.concat ", "
+                (List.map (fun c -> c.last_name) !game_state.characters) ) ;
+        match
+          get_int_selection
+            "Which character would you like to add? Select b) to exit"
+            (List.map string_of_character !char_options)
+            true
+        with
+        | None ->
+            lose_game ~game_over:false ""
+        | Some n ->
+            add_character (List.nth !char_options n)
+              !game_state.map.player_start_room ;
+            selected := !selected + 1 ;
+            char_options :=
+              List.filter
+                (fun c -> ch_neq c (List.nth !char_options n))
+                !char_options
+      done ;
+      Printf.printf "%s\n" "Characters:" ;
+      List.iteri
+        (fun i c -> Printf.printf "\t%d) %s\n" (i + 1) c.last_name)
+        !game_state.characters ) ;
+  (* Get random objectives *)
+  List.iter (fun o -> add_objective o) (get_objectives (n_characters + 1)) ;
+  shuffle_encounters ()
 
 let complete_objective o =
   Printf.printf "[OBJECTIVE] - Completed objective \"%s\"!\n" o.goal_name ;
