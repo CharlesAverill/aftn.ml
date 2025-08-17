@@ -18,7 +18,6 @@ open Utils
 
 let win_game () =
   Printf.printf "%s\n" "!!!!![GAME COMPLETE] - Congratulations!" ;
-  Printf.printf "%s\n" "Your score will be recorded" ;
   reset_terminal () ;
   (* TODO : implement *)
   exit 0

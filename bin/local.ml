@@ -14,7 +14,11 @@ let handle_sigint _ =
   reset_terminal () ;
   exit 0
 
-let game_data_path = concat (List.nth Aftn_sites.Sites.game_data 0) "game_data"
+let game_data_path =
+  match Aftn_sites.Sites.game_data with
+  | [] ->
+      fatal rc_Error "No game data path provided"
+  | h :: _ -> concat h "game_data"
 
 (* Manual options selection *)
 let select_desktop_options (args : arguments) : arguments =
