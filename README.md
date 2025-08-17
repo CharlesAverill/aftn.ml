@@ -8,6 +8,13 @@ implemented in OCaml (see my original [C implementation](https://github.com/Char
 The install script [install.sh](./install.sh) installs dependencies, builds the project, then installs [a .desktop file](game_data/AFTN.desktop) to `/usr/share/applications/`, as well as an icon to `/usr/share/icons/`.
 This requires `sudo` permissions.
 
+To run without installing, simply:
+
+```bash
+opam install . --deps-only
+make run
+```
+
 ## Usage
 ```sh
 Usage: AFTN [OPTION...]
